@@ -1,8 +1,11 @@
+import os
 import timm
 import torch
 from model.vision_transformer import VisionTransformerPETL
 from utils.log_utils import log_model_info
 from utils.setup_logging import get_logger
+from utils.global_var import PRETRAINED_DIR
+from utils.misc import get_param
 
 logger = get_logger("PETL_vision")
 
@@ -90,19 +93,20 @@ def get_device():
 
 
 def get_base_model(params):
+    pretrained_dir = get_param(params, 'pretrained_dir', None) or PRETRAINED_DIR
     if params.pretrained_weights == "vit_base_patch16_224_in21k":
         params.patch_size = 16
         model = timm.create_model("vit_base_patch16_224_in21k_petl", drop_path_rate=params.drop_path_rate,
                                   pretrained=False, params=params)
         model.load_pretrained(
-            'pretrained_weights/ViT-B_16_in21k.npz')
+            os.path.join(pretrained_dir, 'ViT-B_16_in21k.npz'))
         model.reset_classifier(params.class_num)
     elif params.pretrained_weights == "vit_base_mae":
         model = timm.create_model("vit_base_patch16_224_in21k_petl", drop_path_rate=params.drop_path_rate,
                                   pretrained=False,
                                   params=params)
         model.load_pretrained(
-            'pretrained_weights/mae_pretrain_vit_base.pth')
+            os.path.join(pretrained_dir, 'mae_pretrain_vit_base.pth'))
         model.reset_classifier(params.class_num)
     elif params.pretrained_weights == "vit_base_patch14_dinov2":
         params.patch_size = 14
@@ -110,7 +114,7 @@ def get_base_model(params):
                                   pretrained=False,
                                   params=params)
         model.load_pretrained(
-            'pretrained_weights/ViT-B_14_dinov2.pth')
+            os.path.join(pretrained_dir, 'ViT-B_14_dinov2.pth'))
         model.reset_classifier(params.class_num)
     elif params.pretrained_weights == 'vit_base_patch16_clip_224':
         params.patch_size = 16
@@ -118,7 +122,7 @@ def get_base_model(params):
                                   pretrained=False,
                                   params=params)
         model.load_pretrained(
-            'pretrained_weights/ViT-B_16_clip.bin')
+            os.path.join(pretrained_dir, 'ViT-B_16_clip.bin'))
 
         # CLIP is only needed for this backbone, so import it lazily.
         from experiment.build_clip_zs_classifier import get_clip_proj, init_imagenet_clip

@@ -3,6 +3,7 @@ from timm.data.transforms import str_to_interp_mode
 from torchvision import transforms
 from utils.global_var import VTAB_DATASETS, MEAN_STD_DICT
 from data.dataset.utils import ImageFilelist
+from utils.misc import get_param
 
 
 def get_processed_VTAB(params, split):
@@ -11,7 +12,8 @@ def get_processed_VTAB(params, split):
 
     params.class_num = VTAB_DATASETS[data_name]
     mean, std = MEAN_STD_DICT[params.pretrained_weights]
-    if params.normalized:
+    # Off by default, as in the published default_vtab_processed.yml (resize + [0, 1] only).
+    if get_param(params, 'normalized', False):
         transform = transforms.Compose([
             transforms.Resize((params.crop_size, params.crop_size), interpolation=str_to_interp_mode('bicubic')),
             transforms.ToTensor(),

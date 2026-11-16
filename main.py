@@ -1,7 +1,7 @@
 import argparse
 from experiment.run import basic_run
 from utils.setup_logging import get_logger
-from utils.misc import set_seed
+from utils.misc import set_seed, str2bool
 import time
 
 logger = get_logger("PETL_vision")
@@ -69,8 +69,10 @@ def setup_parser():
                         help='Crop size of the input image (default: %(default)s)')
     parser.add_argument('--final_run', action='store_false',
                         help='If final_run is True, use train+val as train data else, use train only')
-    parser.add_argument('--normalized', action='store_false',
-                        help='If imagees are normalized using ImageNet mean and variance ')
+    parser.add_argument('--normalized', type=str2bool, default=False, metavar='{true,false}',
+                        help='Normalize images with the ImageNet mean and std. Default false, the same '
+                             'as the published tuning config default_vtab_processed.yml (resize + [0, 1] only). '
+                             '(default: %(default)s)')
 
     ########################PETL#########################
     parser.add_argument('--ft_attn_module', default=None, choices=['adapter', 'convpass', 'repadapter'],
@@ -204,6 +206,11 @@ def setup_parser():
                         help='Number of GPU (default: %(default)s)')
     parser.add_argument('--debug', action='store_false',
                         help='Debug mode to show more information (default: %(default)s)')
+    parser.add_argument('--output_root', default=None,
+                        help='Root of the run outputs. Default: $PETL_OUTPUT_DIR or ./output')
+    parser.add_argument('--pretrained_dir', default=None,
+                        help='Directory holding the pretrained weights (e.g. ViT-B_16_in21k.npz). '
+                             'Default: $PETL_PRETRAINED_DIR or ./pretrained_weights')
     parser.add_argument('--random_seed', default=42,
                         type=int,
                         help='Random seed (default: %(default)s)')

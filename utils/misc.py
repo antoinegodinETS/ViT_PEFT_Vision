@@ -39,6 +39,18 @@ def get_param(params, name, default=None):
     return getattr(params, name, default)
 
 
+def str2bool(value):
+    """argparse type for explicit true/false values (e.g. --normalized false)."""
+    if isinstance(value, bool):
+        return value
+    lowered = value.lower()
+    if lowered in ('true', '1', 'yes', 'y'):
+        return True
+    if lowered in ('false', '0', 'no', 'n'):
+        return False
+    raise ValueError(f'expected true or false, got {value!r}')
+
+
 def method_name(params):
     name = ''
     if params.ft_attn_module:
