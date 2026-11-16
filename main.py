@@ -127,7 +127,11 @@ def setup_parser():
 
     ########################lora_kaiming#########################
     parser.add_argument('--lora_bottleneck', type=int, default=0,
-                        help='lora bottleneck middle dimension. (default: %(default)s)')
+                        help='LoRA rank r on W_q and W_v; 0 disables LoRA. (default: %(default)s)')
+    parser.add_argument('--lora_alpha', type=float, default=None,
+                        help='LoRA alpha; the update is scaled by alpha / r. Default: r (scale 1).')
+    parser.add_argument('--lora_dropout', type=float, default=0.1,
+                        help='Dropout on the LoRA input. (default: %(default)s)')
 
     ########################FacT#########################
     parser.add_argument('--fact_dim', type=int, default=8,

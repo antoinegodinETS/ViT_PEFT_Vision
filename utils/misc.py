@@ -29,6 +29,16 @@ class AverageMeter(object):
         return fmtstr.format(**self.__dict__)
 
 
+def get_param(params, name, default=None):
+    """Read an optional setting from an argparse Namespace or a DotWiz/dict config.
+
+    Lets newer options (e.g. lora_alpha) work with YAML configs that predate them.
+    """
+    if isinstance(params, dict):
+        return params.get(name, default)
+    return getattr(params, name, default)
+
+
 def method_name(params):
     name = ''
     if params.ft_attn_module:
@@ -74,6 +84,11 @@ def method_name(params):
         name += 'ssf_'
     if params.lora_bottleneck > 0:
         name += 'lora_' + str(params.lora_bottleneck) + '_'
+        # Only non-default LoRA scaling/dropout change the name, so default runs keep their old paths.
+        if get_param(params, 'lora_alpha', None) is not None:
+            name += 'alpha_' + str(get_param(params, 'lora_alpha')) + '_'
+        if get_param(params, 'lora_dropout', 0.1) != 0.1:
+            name += 'drop_' + str(get_param(params, 'lora_dropout')) + '_'
     if params.fact_type:
         name += 'fact_' + params.fact_type + '_' + str(params.fact_dim) + '_' + str(params.fact_scaler) + '_'
     if params.bitfit:
