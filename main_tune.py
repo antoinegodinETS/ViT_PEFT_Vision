@@ -67,7 +67,7 @@ def setup_parser():
     parser.add_argument('--seeds', type=int, nargs='+', default=None,
                         help='Seeds of the final runs. Default: final_seeds in --default, else 0 1 2')
     parser.add_argument('--tune_root', default=None,
-                        help='Root of the tuning outputs. Default: $PETL_TUNE_DIR or ./tune_output')
+                        help='Root of the tuning outputs. Default: $PETL_TUNE_DIR or ./runs/tune')
     parser.add_argument('--pretrained_dir', default=None,
                         help='Directory holding the pretrained weights. Default: $PETL_PRETRAINED_DIR or ./pretrained_weights')
     parser.add_argument('--data_path', default=None,

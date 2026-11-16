@@ -66,10 +66,13 @@ RESISC_VAL_SPLIT = {
 
 # Output roots and the pretrained-weights directory. Precedence: CLI argument
 # (--output_root / --tune_root / --pretrained_dir), then these environment
-# variables, then the original relative defaults.
+# variables, then the defaults below. The tuning roots live under ./runs
+# (gitignored, starts empty): main_tune.py skips any run whose tune_summary.csv /
+# final_result.json already exist, so it must never point at published results
+# (upstream's ./tune_output, removed from this fork).
 OUTPUT_DIR = os.environ.get("PETL_OUTPUT_DIR", "./output")
-TUNE_DIR = os.environ.get("PETL_TUNE_DIR", "./tune_output")
-TUNE_DIR_TEST = os.environ.get("PETL_TUNE_DIR_TEST", "./tune_output_test")
+TUNE_DIR = os.environ.get("PETL_TUNE_DIR", "./runs/tune")
+TUNE_DIR_TEST = os.environ.get("PETL_TUNE_DIR_TEST", "./runs/tune_test")
 PRETRAINED_DIR = os.environ.get("PETL_PRETRAINED_DIR", "pretrained_weights")
 
 # Seeds of the final runs (retrain on train800val200, test once), unless

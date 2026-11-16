@@ -8,11 +8,12 @@ This fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Visio
 - **Final run** (`main_tune.py` after tuning): each seed trains on `train800val200` and evaluates the test set **once, after the last epoch**; that last-epoch accuracy is the reported metric. There is no per-epoch test evaluation and no best-over-epochs number any more.
 - **Seeds**: the final run loops over seeds (`--seeds`, default `0 1 2`). `final_summary.csv` has one row per seed plus `mean` and `std` (sample std) rows; `final_result.json` has `avg_acc`, `std_acc`, `accs`, `per_seed` and mean/std of the time and memory figures.
 - **Time and memory logging** in `tune_summary.csv` (columns appended after the original ones), `final_summary.csv`, `final_result.json` and `main.py`'s `run_result.json`: total and per-epoch training time (with `torch.cuda.synchronize()` on GPU), peak `max_memory_allocated` / `max_memory_reserved` in MiB (reset at training start; null on CPU), device, GPU name, torch/timm versions, trainable parameters with and without the head.
-- **Configurable paths**: `--output_root` (main.py), `--tune_root`, `--data_path` (main_tune.py) and `--pretrained_dir` (both), or the env vars `PETL_OUTPUT_DIR`, `PETL_TUNE_DIR`, `PETL_TUNE_DIR_TEST`, `PETL_PRETRAINED_DIR`. Defaults are unchanged (`./output`, `./tune_output`, `./pretrained_weights`).
+- **Configurable paths**: `--output_root` (main.py), `--tune_root`, `--data_path` (main_tune.py) and `--pretrained_dir` (both), or the env vars `PETL_OUTPUT_DIR`, `PETL_TUNE_DIR`, `PETL_TUNE_DIR_TEST`, `PETL_PRETRAINED_DIR`. Defaults: `./output`, `./runs/tune` (see below), `./pretrained_weights`.
 - **`normalized` is explicit**: default `false` in both `main.py` and `main_tune.py` (as in the published `default_vtab_processed.yml`: resize to 224 and scale to [0, 1], no ImageNet mean/std). Set it with `--normalized {true,false}`; it is recorded in the result files.
 - **Lighter dependencies**: TensorFlow/TFDS and CLIP are imported only on the `tfds_vtab-*`, `clevr*` and CLIP paths, the unused `tkinter` import is gone, and the code falls back to the CPU when no GPU is present. `requirements.txt` lists what the processed VTAB-1k path needs and pins `timm==0.9.12` (timm 1.x breaks `forward_features`); torch is not pinned.
+- **Upstream's published results are removed.** The `tune_output/` folder (Mai et al.'s `tune_summary.csv` / `final_result.json` files) is deleted from the fork (git history keeps it). `main_tune.py` skips any configuration already listed in `tune_summary.csv` and any final run whose `final_result.json` exists, so those files could silently stand in for our runs. The default tuning root is now `./runs/tune` (test runs: `./runs/tune_test`); `runs/` and `tune_output/` are gitignored. `main_tune.py` still resumes from **our own** earlier results in the tuning root, so start from an empty `--tune_root` for a fresh run.
 
-**Careful with `./tune_output`.** It holds the authors' published tuning results, and `main_tune.py` skips work whose `tune_summary.csv` / `final_result.json` already exist. Point new runs elsewhere with `--tune_root` or `PETL_TUNE_DIR`. To run one seed per job, pass `--seeds <s> --final_output_name final_result_seed<s>.json` (the summary becomes `final_result_seed<s>_summary.csv`).
+To run one seed per job, pass `--seeds <s> --final_output_name final_result_seed<s>.json` (the summary becomes `final_result_seed<s>_summary.csv`).
 
 ### CPU smoke test
 
@@ -236,7 +237,7 @@ There are three crucial arguments:
 
 All the config files can be found in the `experiment/config` folder.   
 
-We provide the tuning results `tune_summary.csv` and final run results `final_result.json` in the `tune_output` folder. 
+Upstream provides its tuning results `tune_summary.csv` and final run results `final_result.json` in a `tune_output` folder; **this fork removed it** (see the SYS843 section above), and new runs go to `./runs/tune`. 
 
 If you want to rerun the final run using the best tuning parameters, you can specify a new output name for the final run using this option `--final_output_name`. 
 
@@ -315,7 +316,7 @@ do
 done
 ```
 ## Results
-The tuning results are stord in `tune_summary.csv` and final run results in `final_result.json` and other results for all the experiments in the `tune_output` folder.
+Upstream stores its tuning results (`tune_summary.csv`) and final run results (`final_result.json`) in a `tune_output` folder; this fork removed that folder, and its own runs write to `./runs/tune` (or `--tune_root`).
 
 
 ## To run new hyperparameter tuning

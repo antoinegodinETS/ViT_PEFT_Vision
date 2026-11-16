@@ -1,7 +1,10 @@
 # Pretrained backbone weights (e.g. ViT-B_16_in21k.npz, 413 MB) stay out of git.
 pretrained_weights/
-# Local run outputs and data (published tune_output/ results stay tracked).
+# Local run outputs and data. runs/ is the default tuning root; tune_output/ is
+# upstream's published results, removed from this fork and kept out of it.
+runs/
 output/
+tune_output/
 tune_output_test/
 data_folder/
 __pycache__/
