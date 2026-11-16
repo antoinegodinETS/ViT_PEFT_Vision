@@ -3,7 +3,7 @@ import numpy as np
 import random
 import time
 import yaml
-from dotwiz import DotWiz
+from utils.dotdict import DotDict
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -30,7 +30,7 @@ class AverageMeter(object):
 
 
 def get_param(params, name, default=None):
-    """Read an optional setting from an argparse Namespace or a DotWiz/dict config.
+    """Read an optional setting from an argparse Namespace or a DotDict/dict config.
 
     Lets newer options (e.g. lora_alpha) work with YAML configs that predate them.
     """
@@ -160,7 +160,7 @@ def throughput(model,img_size=224,bs=1):
 def load_yaml(path):
     with open(path, 'r') as stream:
         try:
-            return DotWiz(yaml.load(stream, Loader=yaml.FullLoader))
+            return DotDict(yaml.load(stream, Loader=yaml.FullLoader))
         except yaml.YAMLError as exc:
             print(exc)
 

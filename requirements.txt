@@ -8,7 +8,6 @@ torchvision
 # breaks VisionTransformerPETL; keep 0.9.12.
 timm==0.9.12
 numpy
-dotwiz
 pyyaml
 tabulate
 termcolor

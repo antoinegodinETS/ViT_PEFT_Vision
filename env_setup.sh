@@ -17,7 +17,6 @@ pip install opencv-python
 pip install git+https://github.com/openai/CLIP.git
 
 ####utils
-pip install dotwiz
 pip install pyyaml
 pip install tabulate
 pip install termcolor

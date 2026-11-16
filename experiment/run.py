@@ -6,6 +6,7 @@ from engine.trainer import Trainer
 from timm.utils import get_outdir
 from utils.log_utils import logging_env_setup
 from utils.misc import method_name, get_param
+from utils.dotdict import config_dict
 from datetime import datetime
 import yaml
 import torch
@@ -38,7 +39,7 @@ def basic_run(params):
     output_root = get_param(params, 'output_root', None) or OUTPUT_DIR
     output_dir = os.path.join(output_root, params.pretrained_weights, dataset_name, method, data_name, start_time)
     params.output_dir = get_outdir(output_dir)
-    params_text = yaml.safe_dump(params.__dict__, default_flow_style=False)
+    params_text = yaml.safe_dump(config_dict(params), default_flow_style=False)
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
         f.write(params_text)
     logging_env_setup(params)
