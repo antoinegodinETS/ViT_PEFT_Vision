@@ -67,8 +67,8 @@ def test_repack_writes_one_tarball_per_task(tarballs):
         digest, name = line.split('  ')
         assert hashlib.sha256((tarballs / name).read_bytes()).hexdigest() == digest
     manifest = [line.split('\t')[:2] for line in (tarballs / 'MANIFEST.tsv').read_text().splitlines()[1:]]
-    # 16 images (8 train + 4 val + 4 test) + 4 split files per task
-    assert manifest == [['eurosat', '20'], ['kitti', '20']]
+    # 28 images (8 train + 4 val + 12 train800val200 copies + 4 test) + 4 split files per task
+    assert manifest == [['eurosat', '32'], ['kitti', '32']]
 
 
 def test_repack_fails_for_a_task_missing_from_the_zip(fake_zip, tmp_path):
@@ -85,7 +85,9 @@ def test_stage_task_extracts_checks_and_prints_data_path(tarballs, tmp_path):
     assert sorted(os.listdir(dest)) == ['eurosat']
     for name in ('train800.txt', 'val200.txt', 'train800val200.txt', 'test.txt'):
         assert (dest / 'eurosat' / name).is_file()
-    assert len(list((dest / 'eurosat' / 'images').iterdir())) == 16
+    images = dest / 'eurosat' / 'images'
+    assert sorted(os.listdir(images)) == ['test', 'train800', 'train800val200', 'val200']
+    assert sum(len(os.listdir(images / d)) for d in os.listdir(images)) == 28
     assert 'ok   eurosat' in proc.stderr
     # A second call finds the task already staged.
     again = run(['bash', os.path.join(SCRIPTS, 'stage_task.sh'), str(tarballs), 'eurosat', str(dest)], env=env)
@@ -112,21 +114,88 @@ def test_check_with_real_counts_fails_on_tiny_data(tarballs, tmp_path):
     assert 'train800.txt: 8 lines, expected 800' in proc.stdout and 'test.txt: 4 lines, expected 711' in proc.stdout
 
 
-def test_check_catches_split_errors(tarballs, tmp_path):
+@pytest.fixture
+def eurosat(tarballs, tmp_path):
+    """Extracted fake eurosat task (V-PETL layout) and the check command for it."""
     run(['tar', '-xf', str(tarballs / 'eurosat.tar'), '-C', str(tmp_path)])
     check = [sys.executable, os.path.join(SCRIPTS, 'check_vtab1k.py'), str(tmp_path), '--counts', *SMALL_COUNTS]
-    assert run(check).stdout.splitlines()[-1] == '1/1 task(s) ok'
-    task = tmp_path / 'eurosat'
-    # train800val200 no longer equal to train800 + val200, a label out of range, a missing image
-    tv = (task / 'train800val200.txt').read_text().splitlines()
-    tv[0] = tv[0].rsplit(' ', 1)[0] + ' 99'
-    (task / 'train800val200.txt').write_text('\n'.join(tv) + '\n')
-    os.remove(task / (task / 'test.txt').read_text().split()[0])
+    return tmp_path / 'eurosat', check
+
+
+def set_line(path, index, rel=None, label=None):
+    lines = path.read_text().splitlines()
+    old_rel, old_label = lines[index].rsplit(' ', 1)
+    lines[index] = f'{rel or old_rel} {old_label if label is None else label}'
+    path.write_text('\n'.join(lines) + '\n')
+
+
+def first_image(task, split):
+    return task / (task / split).read_text().split()[0]
+
+
+def test_check_passes_on_the_vpetl_layout(eurosat):
+    task, check = eurosat
+    out = run(check).stdout
+    assert out.splitlines()[-1] == '1/1 task(s) ok' and 'WARNING' not in out
+    # Paths differ between splits; only the image bytes match.
+    tv = (task / 'train800val200.txt').read_text().split()[0]
+    tr = (task / 'train800.txt').read_text().split()[0]
+    assert tv.startswith('images/train800val200/') and tr.startswith('images/train800/')
+    assert (task / tv).read_bytes() == (task / tr).read_bytes()
+
+
+def test_check_catches_split_errors(eurosat):
+    task, check = eurosat
+    # a label out of range, a missing image
+    set_line(task / 'train800.txt', 0, label=99)
+    os.remove(first_image(task, 'test.txt'))
     out = run(check, check=False)
     assert out.returncode == 1
-    assert 'not train800.txt + val200.txt' in out.stdout
     assert 'label 99 outside [0, 10)' in out.stdout
     assert '1 listed image(s) missing' in out.stdout
+
+
+def test_check_fails_when_a_trainval_label_differs(eurosat):
+    task, check = eurosat
+    set_line(task / 'train800val200.txt', 0, label=9)
+    out = run(check, check=False)
+    assert out.returncode == 1
+    assert 'train800val200.txt is not train800.txt + val200.txt (by image content and label): 2 entries differ' \
+        in out.stdout
+
+
+def test_check_fails_when_a_trainval_image_differs(eurosat):
+    task, check = eurosat
+    first_image(task, 'train800val200.txt').write_bytes(first_image(task, 'test.txt').read_bytes())
+    out = run(check, check=False)
+    assert out.returncode == 1
+    assert 'not train800.txt + val200.txt (by image content and label): 2 entries differ' in out.stdout
+
+
+def test_check_warns_on_test_overlap_without_failing(eurosat):
+    task, check = eurosat
+    first_image(task, 'test.txt').write_bytes(first_image(task, 'train800.txt').read_bytes())
+    out = run(check).stdout
+    assert out.splitlines()[-1] == '1/1 task(s) ok'
+    assert 'WARNING: 1 test image(s) byte-identical to a train800val200 image, e.g. images/test/000000.jpg' in out
+
+
+def test_check_no_files_compares_labels_only(eurosat):
+    task, check = eurosat
+    no_files = check + ['--no-files']
+    # Image bytes are not read: a replaced image and a test overlap pass unnoticed.
+    first_image(task, 'train800val200.txt').write_bytes(first_image(task, 'test.txt').read_bytes())
+    out = run(no_files).stdout
+    assert out.splitlines()[-1] == '1/1 task(s) ok'
+    assert 'WARNING: --no-files: train800val200 compared by labels only, test overlap not checked' in out
+    # Reordering the multiset of labels is fine; changing one is not.
+    lines = (task / 'train800val200.txt').read_text().splitlines()
+    (task / 'train800val200.txt').write_text('\n'.join(reversed(lines)) + '\n')
+    assert run(no_files).returncode == 0
+    set_line(task / 'train800val200.txt', 0, label=9)
+    out = run(no_files, check=False)
+    assert out.returncode == 1
+    assert 'not train800.txt + val200.txt (by label, --no-files): 2 entries differ' in out.stdout
 
 
 def test_download_verifies_size_and_checksum(fake_zip, tmp_path):

@@ -6,16 +6,24 @@
 Per task:
   - train800.txt, val200.txt, train800val200.txt and test.txt exist, with
     800 / 200 / 1000 lines and the VPT paper's test size (Table 7);
-  - train800val200 is exactly train800 + val200 (as a multiset of lines);
-  - test shares no image with train800val200;
   - every line is "<relative path> <label>" with 0 <= label < number of classes,
-    and every listed image exists (skip with --no-files).
+    and every listed image exists;
+  - train800val200 is exactly train800 + val200, compared as a multiset of
+    (image content hash, label): in the V-PETL layout each split has its own
+    images/<split>/ folder, so paths differ while the image bytes are copies;
+  - test images that are byte-identical to a train800val200 image are counted
+    and reported as a WARNING, not a failure (tasks such as dSprites,
+    smallNORB or CLEVR can legitimately contain identical renders).
+With --no-files the images are not read: train800val200 is only compared with
+train800 + val200 as a multiset of labels, and the test overlap is skipped.
+Each image file is hashed once.
 Exits 1 if any task fails. --counts overrides the expected sizes (for tests).
 Without --tasks, every task directory present under <data_path> is checked.
 
 Standard library only.
 """
 import argparse
+import hashlib
 import os
 import sys
 from collections import Counter
@@ -42,13 +50,28 @@ def read_split(path, num_classes, errors):
     return entries
 
 
+def hash_file(path):
+    """BLAKE2b digest of the file bytes, or None if the file is missing."""
+    try:
+        with open(path, 'rb') as f:
+            return hashlib.blake2b(f.read(), digest_size=16).digest()
+    except FileNotFoundError:
+        return None
+
+
+def multiset_diff(a, b):
+    """Number of entries in a or b without a counterpart in the other."""
+    ca, cb = Counter(a), Counter(b)
+    return sum(((ca - cb) + (cb - ca)).values())
+
+
 def check_task(data_path, task, expected, check_files=True):
-    """Return (list of errors, {split file: count})."""
+    """Return (list of errors, list of warnings, {split file: count})."""
     num_classes = TASKS[task][0]
     task_dir = os.path.join(data_path, task)
-    errors, counts, splits = [], {}, {}
+    errors, warnings, counts, splits = [], [], {}, {}
     if not os.path.isdir(task_dir):
-        return [f'missing directory {task_dir}'], counts
+        return [f'missing directory {task_dir}'], warnings, counts
     for name, want in expected.items():
         path = os.path.join(task_dir, name)
         if not os.path.isfile(path):
@@ -58,25 +81,40 @@ def check_task(data_path, task, expected, check_files=True):
         counts[name] = len(splits[name])
         if counts[name] != want:
             errors.append(f'{name}: {counts[name]} lines, expected {want}')
-    if all(n in splits for n in ('train800.txt', 'val200.txt', 'train800val200.txt')):
-        if Counter(splits['train800.txt'] + splits['val200.txt']) != Counter(splits['train800val200.txt']):
-            errors.append('train800val200.txt is not train800.txt + val200.txt')
-    if 'test.txt' in splits and 'train800val200.txt' in splits:
-        overlap = {r for r, _ in splits['test.txt']} & {r for r, _ in splits['train800val200.txt']}
-        if overlap:
-            errors.append(f'{len(overlap)} test image(s) also in train800val200, e.g. {sorted(overlap)[0]}')
+    digests = {}
     if check_files:
-        seen = set()
         missing = []
         for entries in splits.values():
             for rel, _ in entries:
-                if rel not in seen:
-                    seen.add(rel)
-                    if not os.path.isfile(os.path.join(task_dir, rel)):
+                if rel not in digests:
+                    digests[rel] = hash_file(os.path.join(task_dir, rel))
+                    if digests[rel] is None:
                         missing.append(rel)
         if missing:
             errors.append(f'{len(missing)} listed image(s) missing, e.g. {missing[0]}')
-    return errors, counts
+    if all(n in splits for n in ('train800.txt', 'val200.txt', 'train800val200.txt')):
+        parts = splits['train800.txt'] + splits['val200.txt']
+        whole = splits['train800val200.txt']
+        if check_files:
+            n = multiset_diff([(digests[r], y) for r, y in parts], [(digests[r], y) for r, y in whole])
+            if n:
+                errors.append(f'train800val200.txt is not train800.txt + val200.txt '
+                              f'(by image content and label): {n} entr{"y" if n == 1 else "ies"} differ')
+        else:
+            n = multiset_diff([y for _, y in parts], [y for _, y in whole])
+            if n:
+                errors.append(f'train800val200.txt is not train800.txt + val200.txt '
+                              f'(by label, --no-files): {n} entr{"y" if n == 1 else "ies"} differ')
+    if 'test.txt' in splits and 'train800val200.txt' in splits:
+        if check_files:
+            train = {digests[r] for r, _ in splits['train800val200.txt']} - {None}
+            overlap = [r for r, _ in splits['test.txt'] if digests[r] in train]
+            if overlap:
+                warnings.append(f'{len(overlap)} test image(s) byte-identical to a train800val200 image, '
+                                f'e.g. {overlap[0]}')
+        else:
+            warnings.append('--no-files: train800val200 compared by labels only, test overlap not checked')
+    return errors, warnings, counts
 
 
 def parse_counts(items):
@@ -106,7 +144,7 @@ def main():
     for task in tasks:
         expected = dict(SPLIT_SIZES, **{'test.txt': TASKS[task][1]})
         expected.update(overrides)
-        errors, counts = check_task(args.data_path, task, expected, check_files=not args.no_files)
+        errors, warnings, counts = check_task(args.data_path, task, expected, check_files=not args.no_files)
         summary = ' '.join(f'{k[:-4]}={v}' for k, v in counts.items())
         if errors:
             failed += 1
@@ -115,6 +153,8 @@ def main():
                 print(f'    {err}')
         else:
             print(f'ok   {task}: {summary}')
+        for warning in warnings:
+            print(f'    WARNING: {warning}')
     print(f'{len(tasks) - failed}/{len(tasks)} task(s) ok')
     sys.exit(1 if failed else 0)
 

@@ -1,15 +1,17 @@
 """Create a tiny random dataset in the processed VTAB-1k layout.
 
-    <root>/<task>/images/*.jpg
+    <root>/<task>/images/{train800,val200,train800val200,test}/*.jpg
     <root>/<task>/{train800.txt, val200.txt, train800val200.txt, test.txt}
 
-Each split file has one "relative/path label" line per image, as in the real
-VTAB-1k folders. Accuracies on this data are meaningless; it only exercises
+Each split file has one "images/<split>/NNNNNN.jpg label" line per image, as in
+the real V-PETL VTAB-1k folders: every split has its own image folder, and the
+train800val200 images are byte copies of the train800 then val200 images. Accuracies on this data are meaningless; it only exercises
 the code paths.
 
 Usage: python tests/fake_vtab.py <root> [--task eurosat]
 """
 import argparse
+import io
 import os
 
 import numpy as np
@@ -23,19 +25,29 @@ def make_fake_vtab(root, task='eurosat', num_classes=10, sizes=None, image_size=
     sizes = dict(DEFAULT_SIZES, **(sizes or {}))
     rng = np.random.default_rng(seed)
     task_dir = os.path.join(root, task)
-    os.makedirs(os.path.join(task_dir, 'images'), exist_ok=True)
-    lines = {}
+    folders = {'train': 'train800', 'val': 'val200', 'trainval': 'train800val200', 'test': 'test'}
+    images = {}  # split -> [(jpeg bytes, label)]
     for split, count in sizes.items():
-        lines[split] = []
+        images[split] = []
         for i in range(count):
-            rel = f'images/{split}_{i:03d}.jpg'
             pixels = rng.integers(0, 256, size=(image_size, image_size, 3), dtype=np.uint8)
-            Image.fromarray(pixels).save(os.path.join(task_dir, rel))
-            lines[split].append(f'{rel} {i % num_classes}')
+            buf = io.BytesIO()
+            Image.fromarray(pixels).save(buf, format='JPEG')
+            images[split].append((buf.getvalue(), i % num_classes))
+    images['trainval'] = images['train'] + images['val']
+    lines = {}
+    for split, items in images.items():
+        os.makedirs(os.path.join(task_dir, 'images', folders[split]), exist_ok=True)
+        lines[split] = []
+        for i, (data, label) in enumerate(items):
+            rel = f'images/{folders[split]}/{i:06d}.jpg'
+            with open(os.path.join(task_dir, rel), 'wb') as f:
+                f.write(data)
+            lines[split].append(f'{rel} {label}')
     files = {
         'train800.txt': lines['train'],
         'val200.txt': lines['val'],
-        'train800val200.txt': lines['train'] + lines['val'],
+        'train800val200.txt': lines['trainval'],
         'test.txt': lines['test'],
     }
     for name, content in files.items():
