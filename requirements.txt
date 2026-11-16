@@ -1,0 +1,22 @@
+# Runtime dependencies for the processed VTAB-1k path (SYS843 fork).
+# torch/torchvision are deliberately not pinned: install the build that matches
+# the cluster's CUDA (e.g. from the Alliance wheelhouse). The original
+# env_setup.sh pinned torch 1.13 / Python 3.7, which is not needed.
+torch
+torchvision
+# timm 1.x changed VisionTransformer.forward_features (attn_mask kwarg) and
+# breaks VisionTransformerPETL; keep 0.9.12.
+timm==0.9.12
+numpy
+dotwiz
+pyyaml
+tabulate
+termcolor
+iopath
+scikit-learn
+pandas
+tqdm
+# Optional, only for the CPU smoke tests under tests/.
+pytest
+# Not needed for processed VTAB: tensorflow / tfds-nightly (tfds_vtab-* and
+# clevr data) and OpenAI CLIP (vit_base_patch16_clip_224); see env_setup.sh.

@@ -1,0 +1,9 @@
+# Pretrained backbone weights (e.g. ViT-B_16_in21k.npz, 413 MB) stay out of git.
+pretrained_weights/
+# Local run outputs and data (published tune_output/ results stay tracked).
+output/
+tune_output_test/
+data_folder/
+__pycache__/
+*.pyc
+.pytest_cache/
