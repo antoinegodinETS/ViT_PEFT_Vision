@@ -1,4 +1,4 @@
-from utils.misc import load_yaml
+from utils.misc import load_yaml, get_param
 from utils.setup_logging import get_logger
 import torch
 import os
@@ -59,7 +59,8 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
             val_loss, val_top1, val_top5 = 0, 0, 0
             val_best_loss, val_best_top1, val_best_top5 = 0, 0, 0
             for i in range(len(train_loader)):
-                train_metrics, best_eval_metrics, eval_metrics, _, _ = train(final_params, train_loader[i], val_loader[i], None)
+                train_metrics, best_eval_metrics, eval_metrics, _, trainer = train(final_params, train_loader[i], val_loader[i], None)
+                run_stats = trainer.run_stats  # stats of the last split
                 train_loss += train_metrics['loss']
                 train_top1 += train_metrics['top1']
                 train_top5 += train_metrics['top5']
@@ -73,12 +74,17 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
             eval_metrics = OrderedDict([('loss', val_loss/5), ('top1', val_top1/5), ('top5',  val_top5/5)])
             best_eval_metrics = OrderedDict([('loss', val_best_loss/5), ('top1', val_best_top1/5), ('top5',  val_best_top5/5)])
         else:
-            train_metrics, best_eval_metrics, eval_metrics, _, _ = train(final_params, train_loader, val_loader, None)
+            train_metrics, best_eval_metrics, eval_metrics, _, trainer = train(final_params, train_loader, val_loader, None)
+            run_stats = trainer.run_stats
+        del trainer
         # debug purpose
         # train_metrics = eval_metrics = OrderedDict(
         #     [('loss', round(0.123, 2)), ('top1', round(0.123, 2)), ('top5', round(0.123, 2))])
+        extra = OrderedDict([('random_seed', final_params.random_seed),
+                             ('normalized', bool(get_param(final_params, 'normalized', False)))])
+        extra.update(run_stats)
         result_tracker(param_set, train_metrics, eval_metrics, best_eval_metrics,
-                       os.path.join(final_params.output_dir, 'tune_summary.csv'), idx == 0)
+                       os.path.join(final_params.output_dir, 'tune_summary.csv'), idx == 0, extra=extra)
         end_this_tune = time.time()
         logger.info(f'----------- Tune this set : {(end_this_tune - start_this_tune) / 60} mins-----------')
     end_tune = time.time()

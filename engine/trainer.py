@@ -1,5 +1,7 @@
 import torch
 import os
+import time
+import timm
 import torch.nn as nn
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from collections import OrderedDict
@@ -119,23 +121,78 @@ class Trainer():
         return OrderedDict(
             [('loss', round(loss_m.avg, 2)), ('top1', round(top1_m.avg, 2)), ('top5', round(top5_m.avg, 2))])
 
+    def sync(self):
+        """Wait for queued GPU work so wall-clock timings are accurate (no-op on CPU)."""
+        if torch.device(self.device).type == 'cuda':
+            torch.cuda.synchronize(self.device)
+
+    def _start_run_stats(self):
+        """Reset the peak-memory counters and start the training clock."""
+        self._is_cuda = torch.device(self.device).type == 'cuda'
+        if self._is_cuda:
+            torch.cuda.synchronize(self.device)
+            torch.cuda.reset_peak_memory_stats(self.device)
+        self._epoch_times = []
+        self._in_loop_eval_time = 0.0
+        self.sync()
+        self._train_start = time.perf_counter()
+
+    def _finish_run_stats(self):
+        """Stop the training clock and record time, peak memory and environment in self.run_stats."""
+        self.sync()
+        train_time = time.perf_counter() - self._train_start
+        mib = 1024.0 * 1024.0
+        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        trainable_no_head = sum(p.numel() for n, p in self.model.named_parameters()
+                                if p.requires_grad and 'head' not in n)
+        self.run_stats = OrderedDict([
+            ('train_time_s', round(train_time, 4)),
+            ('epochs_run', len(self._epoch_times)),
+            ('epoch_time_mean_s', round(sum(self._epoch_times) / len(self._epoch_times), 4)
+             if self._epoch_times else None),
+            ('epoch_times_s', [round(t, 4) for t in self._epoch_times]),
+            ('in_loop_eval_time_s', round(self._in_loop_eval_time, 4)),
+            ('peak_memory_allocated_mib', round(torch.cuda.max_memory_allocated(self.device) / mib, 2)
+             if self._is_cuda else None),
+            ('peak_memory_reserved_mib', round(torch.cuda.max_memory_reserved(self.device) / mib, 2)
+             if self._is_cuda else None),
+            ('device', str(self.device)),
+            ('gpu_name', torch.cuda.get_device_name(self.device) if self._is_cuda else None),
+            ('torch_version', torch.__version__),
+            ('timm_version', timm.__version__),
+            ('trainable_params', trainable),
+            ('trainable_params_no_head', trainable_no_head),
+        ])
+        logger.info(f"Run stats: train time {self.run_stats['train_time_s']:.2f}s, "
+                    f"peak allocated {self.run_stats['peak_memory_allocated_mib']} MiB, "
+                    f"peak reserved {self.run_stats['peak_memory_reserved_mib']} MiB")
+        return self.run_stats
+
     def train_classifier(self, train_loader, val_loader, test_loader):
         """
-        Train a classifier using epoch
+        Train a classifier using epoch.
+
+        Evaluates on test_loader if given, else on val_loader, every eval_freq epochs
+        and at the last epoch. With neither loader it only trains (the final run
+        evaluates the test set once afterwards) and returns (train_metrics, None, None).
+        Training time, per-epoch time and peak GPU memory end up in self.run_stats.
         """
+        eval_loader, eval_prefix = (test_loader, "test") if test_loader is not None else (val_loader, "val")
+        eval_metrics = None
+        self._start_run_stats()
 
         for epoch in range(self.total_epoch):
-
+            self.sync()
+            epoch_start = time.perf_counter()
             train_metrics = self.train_one_epoch(epoch, train_loader)
+            self.sync()
+            self._epoch_times.append(time.perf_counter() - epoch_start)
 
-            if (epoch % self.params.eval_freq == 0) or epoch == self.total_epoch - 1:
-                if test_loader is not None:
-                    eval_metrics = self.eval_classifier(
-                        test_loader, "test")
-                elif val_loader is not None:
-                    eval_metrics = self.eval_classifier(val_loader, "val")
-                else:
-                    raise Exception('Both val and test loaders are missing. ')
+            if eval_loader is not None and ((epoch % self.params.eval_freq == 0) or epoch == self.total_epoch - 1):
+                eval_start = time.perf_counter()
+                eval_metrics = self.eval_classifier(eval_loader, eval_prefix)
+                self.sync()
+                self._in_loop_eval_time += time.perf_counter() - eval_start
 
                 if self.params.early_patience > 0:
                     stop, save_model = self.early_stop_check.early_stop(eval_metrics)
@@ -143,6 +200,7 @@ class Trainer():
                         torch.save({'model_state_dict': self.model.state_dict()},
                                    os.path.join(self.params.output_dir, 'model.pt'))
                     if stop:
+                        self._finish_run_stats()
                         return train_metrics, self.early_stop_check.max_metrics, eval_metrics
                 if self.params.debug:
                     update_summary(
@@ -150,9 +208,16 @@ class Trainer():
                         write_header=epoch == 0)
             self.scheduler.step(epoch)
 
+        self._finish_run_stats()
         if self.params.store_ckp and not os.path.isfile(os.path.join(self.params.output_dir, 'model.pt')):
             torch.save({'model_state_dict': self.model.state_dict()}, os.path.join(self.params.output_dir, 'model.pt'))
-        return train_metrics, self.early_stop_check.max_metrics, eval_metrics
+        if eval_loader is None:
+            best_eval_metrics = None
+        elif self.params.early_patience > 0:
+            best_eval_metrics = self.early_stop_check.max_metrics
+        else:
+            best_eval_metrics = eval_metrics
+        return train_metrics, best_eval_metrics, eval_metrics
 
     @torch.no_grad()
     def eval_classifier(self, loader, prefix):

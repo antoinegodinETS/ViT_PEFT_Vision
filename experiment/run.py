@@ -1,17 +1,17 @@
 import os
 from experiment.build_model import get_model
 from experiment.build_loader import get_loader
-from utils.global_var import OUTPUT_DIR, TUNE_DIR, TUNE_DIR_TEST
+from utils.global_var import OUTPUT_DIR, TUNE_DIR, TUNE_DIR_TEST, DEFAULT_FINAL_SEEDS
 from engine.trainer import Trainer
 from timm.utils import get_outdir
 from utils.log_utils import logging_env_setup
-from utils.misc import method_name
+from utils.misc import method_name, get_param
 from datetime import datetime
 import yaml
 import torch
 from utils.misc import set_seed
 from collections import OrderedDict
-from statistics import mean
+from statistics import mean, stdev
 import json
 import time
 import csv
@@ -22,10 +22,11 @@ logger = get_logger("PETL_vision")
 
 
 def train(params, train_loader, val_loader, test_loader):
+    """Build a model and train it; trainer.run_stats holds its time/memory measurements."""
     model, tune_parameters, model_grad_params_no_head = get_model(params)
     trainer = Trainer(model, tune_parameters, params)
     train_metrics, best_eval_metrics, eval_metrics = trainer.train_classifier(train_loader, val_loader, test_loader)
-    return train_metrics, best_eval_metrics, eval_metrics, model_grad_params_no_head, trainer.model
+    return train_metrics, best_eval_metrics, eval_metrics, model_grad_params_no_head, trainer
 
 def basic_run(params):
     if torch.cuda.is_available():
@@ -34,7 +35,8 @@ def basic_run(params):
     dataset_name = params.data.split("-")[0]
     method = method_name(params)
     start_time = datetime.now().strftime("%Y-%m-%d-%H:%M")
-    output_dir = os.path.join(OUTPUT_DIR, params.pretrained_weights, dataset_name, method, data_name, start_time)
+    output_root = get_param(params, 'output_root', None) or OUTPUT_DIR
+    output_dir = os.path.join(output_root, params.pretrained_weights, dataset_name, method, data_name, start_time)
     params.output_dir = get_outdir(output_dir)
     params_text = yaml.safe_dump(params.__dict__, default_flow_style=False)
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
@@ -43,7 +45,13 @@ def basic_run(params):
     logger.info(f'Start loading {data_name}')
     train_loader, val_loader, test_loader = get_loader(params, logger)
 
-    train(params, train_loader, val_loader, test_loader)
+    train_metrics, best_eval_metrics, eval_metrics, _, trainer = train(params, train_loader, val_loader, test_loader)
+    result = OrderedDict([('train', train_metrics), ('eval', eval_metrics), ('best_eval', best_eval_metrics),
+                          ('normalized', bool(get_param(params, 'normalized', False))),
+                          ('seed', params.random_seed)])
+    result.update(trainer.run_stats)
+    with open(os.path.join(output_dir, 'run_result.json'), 'w') as f:
+        json.dump(result, f, indent=2)
 
 
 def update_output_dir(default_params, test):
@@ -56,7 +64,8 @@ def update_output_dir(default_params, test):
     if test:
         output_dir = os.path.join(TUNE_DIR_TEST, default_params.experiment_name, dataset_name, data_name, method)
     else:
-        output_dir = os.path.join(TUNE_DIR, default_params.experiment_name, dataset_name, data_name, method)
+        tune_root = get_param(default_params, 'tune_root', None) or TUNE_DIR
+        output_dir = os.path.join(tune_root, default_params.experiment_name, dataset_name, data_name, method)
     default_params.output_dir = output_dir
 
     logging_env_setup(default_params)
@@ -109,7 +118,45 @@ def collect_prediction(default_params):
 
 
 
-def final_run(default_params, sum_name='final_summary.csv', result_name='final_result.json'):
+def final_seeds(params):
+    """Seeds of the final runs: --seeds / final_seeds in the config, else DEFAULT_FINAL_SEEDS (0, 1, 2)."""
+    seeds = get_param(params, 'final_seeds', None)
+    if seeds is None:
+        return list(DEFAULT_FINAL_SEEDS)
+    if isinstance(seeds, (int, str)):
+        seeds = [seeds]
+    return [int(seed) for seed in seeds]
+
+
+def summary_name_for(result_name):
+    """final_result.json -> final_summary.csv; any other result name X.json -> X_summary.csv."""
+    if result_name == 'final_result.json':
+        return 'final_summary.csv'
+    return os.path.splitext(result_name)[0] + '_summary.csv'
+
+
+def _mean_std(values):
+    """Mean and sample standard deviation (n - 1); std is None with fewer than two values."""
+    values = [v for v in values if v is not None]
+    if not values:
+        return None, None
+    return mean(values), (stdev(values) if len(values) > 1 else None)
+
+
+SEED_STAT_KEYS = ['test_top1', 'test_top5', 'test_loss', 'train_top1', 'train_top5', 'train_loss', 'train_time_s',
+                  'epoch_time_mean_s', 'test_eval_time_s', 'peak_memory_allocated_mib', 'peak_memory_reserved_mib']
+
+
+def final_run(default_params, sum_name=None, result_name='final_result.json'):
+    """Retrain the best tuned config on train800val200 for each seed and test once at the end.
+
+    The test set is evaluated a single time per seed, after the last epoch; that
+    last-epoch accuracy is the reported metric (no per-epoch test evaluation and
+    no best-over-epochs number). Per-seed results plus mean and sample std go to
+    the summary CSV and the result JSON.
+    """
+    if sum_name is None:
+        sum_name = summary_name_for(result_name)
     if os.path.isfile(os.path.join(default_params.output_dir, result_name)):
         logger.info(f'{result_name} exist, next')
         return
@@ -123,17 +170,14 @@ def final_run(default_params, sum_name='final_summary.csv', result_name='final_r
         best_tune = eval(sorted(tune_summary, key=lambda x: float(x[8]))[-1][0])
     final_params = default_params
     final_params.update(best_tune)
-    final_params.eval_freq = 1
     final_params.early_patience = 100
     logger.info(final_params)
 
     final_params.final_run = True
     train_loader, _, test_loader = get_loader(default_params, logger)
-    random_seeds = [final_params.random_seed]
-    #random_seeds = [final_params.random_seed, final_params.random_seed*5, final_params.random_seed*10]
-    logger.info(f'----------- Start final runs: {len(random_seeds)} run(s) to average-----------')
-    final_accs = []
-    best_accs = []
+    random_seeds = final_seeds(final_params)
+    logger.info(f'----------- Start final runs: {len(random_seeds)} run(s) with seeds {random_seeds}-----------')
+    rows = []
     train_start = time.time()
     for idx, seed in enumerate(random_seeds):
         train_this_start = time.time()
@@ -141,21 +185,81 @@ def final_run(default_params, sum_name='final_summary.csv', result_name='final_r
             torch.cuda.empty_cache()
         final_params.random_seed = seed
         set_seed(seed)
-        train_metrics, best_eval_metrics, eval_metrics, model_grad_params_no_head, model = train(final_params, train_loader, None,
-                                                                              test_loader)
-        # debug purpose
-        # train_metrics = eval_metrics = OrderedDict(
-        #     [('loss', round(0.123, 2)), ('top1', round(0.123, 2)), ('top5', round(0.123, 2))])
-        result_tracker(idx, train_metrics, eval_metrics, best_eval_metrics,
-                       os.path.join(final_params.output_dir, sum_name), idx == 0, 'run_idx', 'test_')
-        final_accs.append(eval_metrics['top1'])
-        best_accs.append(best_eval_metrics['top1'])
+        # Train without looking at the test set, then evaluate it once.
+        train_metrics, _, _, model_grad_params_no_head, trainer = train(final_params, train_loader, None, None)
+        trainer.sync()
+        eval_start = time.perf_counter()
+        test_metrics = trainer.eval_classifier(test_loader, 'test')
+        trainer.sync()
+        test_eval_time = time.perf_counter() - eval_start
+
+        row = OrderedDict([('run_idx', idx), ('seed', seed)])
+        row.update([('train_' + k, v) for k, v in train_metrics.items()])
+        row.update([('test_' + k, v) for k, v in test_metrics.items()])
+        row['test_eval_time_s'] = round(test_eval_time, 4)
+        row.update(trainer.run_stats)
+        rows.append(row)
+        del trainer
         train_this_end = time.time()
-        logger.info(f'----------- train this run : {(train_this_end - train_this_start) / 60} mins-----------')
-    json.dump({"avg_acc": mean(final_accs), "avg_best_acc": mean(best_accs), "inserted_parameters": model_grad_params_no_head, 'best_tune': best_tune},
-              open(os.path.join(final_params.output_dir, result_name), 'w'))
+        logger.info(f'----------- seed {seed}: test top1 {test_metrics["top1"]}, '
+                    f'train this run : {(train_this_end - train_this_start) / 60} mins-----------')
+
+    stats = OrderedDict()
+    for key in SEED_STAT_KEYS:
+        stats[key] = _mean_std([row[key] for row in rows])
+    write_final_summary(rows, stats, os.path.join(final_params.output_dir, sum_name))
+
+    accs = [row['test_top1'] for row in rows]
+    last = rows[-1]
+    result = OrderedDict([
+        ('metric', 'test top-1 accuracy after the last epoch, test set evaluated once per seed'),
+        ('avg_acc', stats['test_top1'][0]),
+        ('std_acc', stats['test_top1'][1]),
+        ('accs', accs),
+        ('seeds', random_seeds),
+    ])
+    for key in SEED_STAT_KEYS[1:]:
+        result['avg_' + key], result['std_' + key] = stats[key]
+    result.update([
+        ('inserted_parameters', model_grad_params_no_head),
+        ('trainable_params', last['trainable_params']),
+        ('trainable_params_no_head', last['trainable_params_no_head']),
+        ('device', last['device']),
+        ('gpu_name', last['gpu_name']),
+        ('torch_version', last['torch_version']),
+        ('timm_version', last['timm_version']),
+        ('normalized', bool(get_param(final_params, 'normalized', False))),
+        ('epochs', final_params.epoch),
+        ('best_tune', best_tune),
+        ('per_seed', rows),
+    ])
+    with open(os.path.join(final_params.output_dir, result_name), 'w') as f:
+        json.dump(result, f, indent=2)
     train_end = time.time()
+    logger.info(f'----------- final test top1 {result["avg_acc"]} +- {result["std_acc"]} over seeds {random_seeds}-----------')
     logger.info(f'----------- Total train time : {(train_end - train_start) / 60} mins-----------')
+
+
+def write_final_summary(rows, stats, filename):
+    """Per-seed rows, then a 'mean' and a 'std' row (sample std) over the seeds."""
+    fieldnames = list(rows[0].keys())
+    with open(filename, mode='w', newline='') as cf:
+        dw = csv.DictWriter(cf, fieldnames=fieldnames)
+        dw.writeheader()
+        for row in rows:
+            dw.writerow(_csv_row(row))
+        for label, pos in (('mean', 0), ('std', 1)):
+            agg = OrderedDict((k, '') for k in fieldnames)
+            agg['run_idx'] = label
+            for key, values in stats.items():
+                if key in agg and values[pos] is not None:
+                    agg[key] = values[pos]
+            dw.writerow(agg)
+
+
+def _csv_row(row):
+    """Lists (e.g. per-epoch times) go into a CSV cell as JSON."""
+    return OrderedDict((k, json.dumps(v) if isinstance(v, (list, tuple, dict)) else v) for k, v in row.items())
 
 
 
@@ -194,13 +298,19 @@ def evaluate(default_params):
 
 
 def result_tracker(first_col, train_metrics, eval_metrics, best_eval_metrics, filename, write_header=False, first_col_name='param_set',
-                   eval_name='val_'):
+                   eval_name='val_', extra=None):
+    """Append one row. The first nine columns keep their original order (final_run selects
+    on columns 5 and 8); `extra` (e.g. time and memory stats) is appended after them.
+    The header is written when the file is missing or empty (write_header is ignored)."""
     rowd = OrderedDict([(first_col_name, first_col)])
     rowd.update([('train_' + k, v) for k, v in train_metrics.items()])
     rowd.update([(eval_name + k, v) for k, v in eval_metrics.items()])
     rowd.update([(eval_name + "best_" + k, v) for k, v in best_eval_metrics.items()])
-    with open(filename, mode='a') as cf:
+    if extra:
+        rowd.update(extra)
+    write_header = not os.path.isfile(filename) or os.path.getsize(filename) == 0
+    with open(filename, mode='a', newline='') as cf:
         dw = csv.DictWriter(cf, fieldnames=rowd.keys())
         if write_header:
             dw.writeheader()
-        dw.writerow(rowd)
+        dw.writerow(_csv_row(rowd))

@@ -1,3 +1,4 @@
+import os
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD, \
     OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
@@ -63,6 +64,14 @@ RESISC_VAL_SPLIT = {
 }
 
 
-OUTPUT_DIR = "./output"
-TUNE_DIR = "./tune_output"
-TUNE_DIR_TEST = "./tune_output_test"
+# Output roots and the pretrained-weights directory. Precedence: CLI argument
+# (--output_root / --tune_root / --pretrained_dir), then these environment
+# variables, then the original relative defaults.
+OUTPUT_DIR = os.environ.get("PETL_OUTPUT_DIR", "./output")
+TUNE_DIR = os.environ.get("PETL_TUNE_DIR", "./tune_output")
+TUNE_DIR_TEST = os.environ.get("PETL_TUNE_DIR_TEST", "./tune_output_test")
+PRETRAINED_DIR = os.environ.get("PETL_PRETRAINED_DIR", "pretrained_weights")
+
+# Seeds of the final runs (retrain on train800val200, test once), unless
+# overridden by --seeds or a final_seeds key in the YAML config.
+DEFAULT_FINAL_SEEDS = [0, 1, 2]
