@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import pytest
+import torch
 import yaml
 
 from conftest import REPO, EXPECTED_TRAINABLE_NO_HEAD
@@ -64,7 +65,7 @@ def workspace(tmp_path_factory):
     return root, default_yml, weights_dir
 
 
-def run_tune(workspace, name, method, lrs, seeds):
+def run_tune(workspace, name, method, lrs, seeds, extra=(), expect_ok=True):
     root, default_yml, weights_dir = workspace
     method_yml = root / f'{name}_method.yml'
     method_yml.write_text(yaml.safe_dump(method))
@@ -73,10 +74,12 @@ def run_tune(workspace, name, method, lrs, seeds):
     tune_root = root / f'tune_{name}'
     cmd = [sys.executable, 'main_tune.py', '--data', f'processed_vtab-{TASK}', '--default', str(default_yml),
            '--tune', str(method_yml), '--lrwd', str(lrwd_yml), '--tune_root', str(tune_root),
-           '--pretrained_dir', str(weights_dir), '--seeds', *[str(s) for s in seeds]]
+           '--pretrained_dir', str(weights_dir), '--seeds', *[str(s) for s in seeds], *extra]
     proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
-    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-3000:]
     out = tune_root / 'smoke' / 'processed_vtab' / TASK / method['method_name']
+    if not expect_ok:
+        return out, proc
+    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-3000:]
     return out
 
 
@@ -92,8 +95,12 @@ def test_one_epoch_per_method(workspace, name):
     assert result['trainable_params_no_head'] == EXPECTED_TRAINABLE_NO_HEAD[name]
     assert result['inserted_parameters'] == EXPECTED_TRAINABLE_NO_HEAD[name]
     assert result['trainable_params'] == EXPECTED_TRAINABLE_NO_HEAD[name] + 768 * 10 + 10
-    assert result['device'] == 'cpu' and result['gpu_name'] is None
-    assert result['avg_peak_memory_allocated_mib'] is None  # no CUDA on CPU
+    if torch.cuda.is_available():  # e.g. check_env.sbatch on an H100
+        assert result['device'].startswith('cuda') and result['gpu_name']
+        assert result['avg_peak_memory_allocated_mib'] > 0
+    else:
+        assert result['device'] == 'cpu' and result['gpu_name'] is None
+        assert result['avg_peak_memory_allocated_mib'] is None  # no CUDA on CPU
     assert result['timm_version'] == '0.9.12'
     assert result['normalized'] is False
     assert result['seeds'] == [0] and len(result['per_seed']) == 1
@@ -160,7 +167,10 @@ def test_tuning_result_does_not_depend_on_grid_order(workspace):
     assert [eval(r['param_set'])['lr'] for r in rows_second] == [0.01, 0.001]
     run_first, run_second = rows_first[0], rows_second[1]
     for field in METRIC_FIELDS:
-        assert run_first[field] == run_second[field], field
+        if torch.cuda.is_available():  # some CUDA kernels (e.g. attention backward) are not bit-exact
+            assert float(run_first[field]) == pytest.approx(float(run_second[field]), abs=0.05), field
+        else:
+            assert run_first[field] == run_second[field], field
     for row in rows_first + rows_second:
         assert row['random_seed'] == '42'  # the tuning seed from default_vtab_processed.yml
 
@@ -186,3 +196,18 @@ def test_sys843_per_task_config_end_to_end(workspace):
     result = json.loads((out / 'final_result.json').read_text())
     assert result['trainable_params_no_head'] == 50 * 768
     assert result['best_tune'] == {'lr': 0.001, 'wd': 0.0}
+
+
+def test_tune_and_final_stages_run_separately(workspace):
+    """--stage tune (MIG tuning job) then --stage final (full-H100 final job) on one tuning root;
+    --stage final refuses to start while grid points are missing."""
+    method = dict(METHOD_YAML['lora_r8'], method_name='lora_stages')
+    out, proc = run_tune(workspace, 'stages', method, lrs=[0.001, 0.01], seeds=[0],
+                         extra=['--stage', 'final'], expect_ok=False)
+    assert proc.returncode != 0 and 'not tuned yet' in proc.stdout + proc.stderr
+    run_tune(workspace, 'stages', method, lrs=[0.001, 0.01], seeds=[0], extra=['--stage', 'tune', '--num_workers', '0'])
+    assert len(read_csv(out / 'tune_summary.csv')) == 2
+    assert not (out / 'final_result.json').exists()
+    run_tune(workspace, 'stages', method, lrs=[0.001, 0.01], seeds=[0], extra=['--stage', 'final'])
+    assert len(read_csv(out / 'tune_summary.csv')) == 2  # nothing tuned again
+    assert json.loads((out / 'final_result.json').read_text())['seeds'] == [0]

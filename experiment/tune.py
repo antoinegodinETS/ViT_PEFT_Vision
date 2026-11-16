@@ -13,13 +13,23 @@ logger = get_logger("PETL_vision")
 
 
 
-def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
+STAGES = ('all', 'tune', 'final')
+
+
+def hyper_tune_final_run(default_params, hyper_tune_params, test=False, stage='all'):
     """Tune every grid point on train800/val200, then run the final runs with the best one.
 
     Each grid point is re-seeded with the tuning seed (random_seed) before its model is
     built, so model init, data order and dropout start from the same random state
     whatever the order of the grid or the points already done.
+
+    stage: 'all' tunes the missing grid points then runs the final runs; 'tune' stops
+    after tuning; 'final' only runs the final runs and fails if tuning is incomplete.
+    Grid points already in tune_summary.csv and a final run whose result file exists
+    are skipped, so any stage can be rerun after an interruption.
     """
+    if stage not in STAGES:
+        raise ValueError(f'stage must be one of {STAGES}, got {stage!r}')
     output_dir, data_name = update_output_dir(default_params, test)
     tune_seed = int(default_params.random_seed)
     if len(hyper_tune_params) == 0:
@@ -34,10 +44,16 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
         with open(os.path.join(default_params.output_dir, 'tune_summary.csv'), newline='') as f:
             tune_summary = list(csv.reader(f))[1:]
             already_set = [eval(i[0]) for i in tune_summary]
-            if len(tune_summary) == len(param_grid):
-                logger.info('all tuning is done, start final run')
-                final_run(default_params, result_name=default_params.final_output_name)
-                return
+    missing = [p for p in param_grid if p not in already_set]
+    if not missing:
+        logger.info('all tuning is done')
+        if stage != 'tune':
+            logger.info('start final run')
+            final_run(default_params, result_name=default_params.final_output_name)
+        return
+    if stage == 'final':
+        raise SystemExit(f'--stage final: {len(missing)} of {len(param_grid)} grid points are not tuned yet '
+                         f'in {default_params.output_dir}')
     get_outdir(output_dir)
     logger.info(f'Start loading {data_name}')
     default_params.final_run = False
@@ -98,6 +114,9 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
         logger.info(f'----------- Tune this set : {(end_this_tune - start_this_tune) / 60} mins-----------')
     end_tune = time.time()
     logger.info(f'----------- Tune total {len(param_grid)} sets: {(end_tune - start_tune) / 60} mins-----------')
+    if stage == 'tune':
+        logger.info('--stage tune: tuning done, no final run')
+        return
     final_run(default_params, result_name=default_params.final_output_name)
 
 

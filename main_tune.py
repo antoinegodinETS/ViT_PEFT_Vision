@@ -4,7 +4,7 @@ from utils.setup_logging import get_logger
 from utils.misc import set_seed, str2bool
 import time
 from utils.misc import load_yaml
-from experiment.tune import hyper_tune_final_run
+from experiment.tune import hyper_tune_final_run, STAGES
 
 logger = get_logger("PETL_vision")
 
@@ -20,7 +20,7 @@ def main():
     default_params, hyper_tune_params = build_params(args)
     set_seed(default_params.random_seed)
     start = time.time()
-    hyper_tune_final_run(default_params, hyper_tune_params, test=args.test)
+    hyper_tune_final_run(default_params, hyper_tune_params, test=args.test, stage=args.stage)
     end = time.time()
     logger.info(f'----------- Total Run time : {(end - start) / 60} mins-----------')
 
@@ -108,6 +108,8 @@ def build_params(args):
         default_params.pretrained_dir = args.pretrained_dir
     if args.data_path is not None:
         default_params.data_path = args.data_path
+    if args.num_workers is not None:
+        default_params.num_workers = args.num_workers
     if args.test_bs is not None:
         default_params.test_batch_size = args.test_bs
         if args.bs is not None:
@@ -125,6 +127,11 @@ def setup_parser():
     parser.add_argument('--tune', default=None, help=f'Method config. Default: {DEFAULT_TUNE}')
     parser.add_argument('--lrwd', default=None, help=f'lr/wd grid config. Default: {DEFAULT_LRWD}')
     parser.add_argument('--test', action='store_true', help="put results in test folder")
+    parser.add_argument('--stage', choices=STAGES, default='all',
+                        help='all: tune the missing grid points, then the final runs; tune: stop after tuning; '
+                             'final: final runs only, error if tuning is incomplete')
+    parser.add_argument('--num_workers', type=int, default=None,
+                        help='DataLoader workers. Default: num_workers in --default, else 4 (1 with debug)')
     parser.add_argument('--final_output_name', default='final_result.json')
     parser.add_argument('--test_bs', type=int, default=None)
     parser.add_argument('--bs', type=int, default=None)

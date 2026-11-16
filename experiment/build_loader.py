@@ -1,4 +1,5 @@
 import torch
+from utils.misc import get_param
 from data.dataset.vtab_processed import get_processed_VTAB
 from data.dataset.cifar100 import get_cifar
 from data.dataset.few_shot import get_fs
@@ -94,10 +95,9 @@ def get_loader(params, logger):
 
 def gen_loader(params, dataset_train, dataset_val, dataset_test):
     train_loader, val_loader, test_loader = None, None, None
-    if params.debug:
-        num_workers = 1
-    else:
-        num_workers = 4
+    num_workers = get_param(params, 'num_workers', None)
+    if num_workers is None:
+        num_workers = 1 if params.debug else 4
     if dataset_train is not None:
         train_loader = torch.utils.data.DataLoader(
             dataset_train,
