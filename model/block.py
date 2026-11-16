@@ -113,8 +113,6 @@ class BlockPETL(nn.Module):
                 x_ft_attn = self.drop_path1(self.ls1(self.attn(self.ft_attn_module(x_norm1), idx)))
             else:
                 raise NotImplementedError
-
-            torch.cuda.empty_cache()
         else:
             # no tuning
             x_ft_attn = self.drop_path1(self.ls1(self.attn(x_norm1, idx)))
@@ -126,7 +124,6 @@ class BlockPETL(nn.Module):
             x = x_ft_attn + residual_attn
 
         del x_norm1, x_ft_attn, residual_attn
-        torch.cuda.empty_cache()
 
         # MLP path
         residual_mlp = x
@@ -155,8 +152,6 @@ class BlockPETL(nn.Module):
                 x_ft_mlp = self.drop_path2(self.ls2(self.mlp(self.ft_mlp_module(x_norm2), idx)))
             else:
                 raise NotImplementedError
-
-            torch.cuda.empty_cache()
         else:
             # no tuning
             x_ft_mlp = self.drop_path2(self.ls2(self.mlp(x_norm2, idx)))
@@ -167,7 +162,6 @@ class BlockPETL(nn.Module):
         else:
             x = x_ft_mlp + residual_mlp
         del x_norm2, x_ft_mlp, residual_mlp
-        torch.cuda.empty_cache()
         # Original forward
         # x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
         # x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
