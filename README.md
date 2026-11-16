@@ -1,3 +1,33 @@
+## Changes in this fork (SYS843)
+
+This fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Vision) (Mai et al., CVPR 2025) is used to compare LoRA, AdaptFormer, VPT-Shallow, VPT-Deep and full fine-tuning on VTAB-1k (SYS843 course project, ETS). The original README follows below this section. Changes:
+
+- **LoRA on W_q and W_v only**, with separate A/B matrices per projection (upstream added a delta to q, k and v from a shared A). `--lora_bottleneck r` is still the rank (r=8 gives 294,912 trainable parameters). New `--lora_alpha` (scale alpha/r, default alpha=r, i.e. scale 1 as before) and `--lora_dropout` (default 0.1 as before).
+- **VPT-Shallow prompts go through all 12 blocks** and are removed after the last one (upstream removed them after block 0). VPT-Deep is unchanged.
+- **No `torch.cuda.empty_cache()` inside the blocks** (it ran up to twice per block per forward pass and distorted timings).
+- **Final run** (`main_tune.py` after tuning): each seed trains on `train800val200` and evaluates the test set **once, after the last epoch**; that last-epoch accuracy is the reported metric. There is no per-epoch test evaluation and no best-over-epochs number any more.
+- **Seeds**: the final run loops over seeds (`--seeds`, default `0 1 2`). `final_summary.csv` has one row per seed plus `mean` and `std` (sample std) rows; `final_result.json` has `avg_acc`, `std_acc`, `accs`, `per_seed` and mean/std of the time and memory figures.
+- **Time and memory logging** in `tune_summary.csv` (columns appended after the original ones), `final_summary.csv`, `final_result.json` and `main.py`'s `run_result.json`: total and per-epoch training time (with `torch.cuda.synchronize()` on GPU), peak `max_memory_allocated` / `max_memory_reserved` in MiB (reset at training start; null on CPU), device, GPU name, torch/timm versions, trainable parameters with and without the head.
+- **Configurable paths**: `--output_root` (main.py), `--tune_root`, `--data_path` (main_tune.py) and `--pretrained_dir` (both), or the env vars `PETL_OUTPUT_DIR`, `PETL_TUNE_DIR`, `PETL_TUNE_DIR_TEST`, `PETL_PRETRAINED_DIR`. Defaults are unchanged (`./output`, `./tune_output`, `./pretrained_weights`).
+- **`normalized` is explicit**: default `false` in both `main.py` and `main_tune.py` (as in the published `default_vtab_processed.yml`: resize to 224 and scale to [0, 1], no ImageNet mean/std). Set it with `--normalized {true,false}`; it is recorded in the result files.
+- **Lighter dependencies**: TensorFlow/TFDS and CLIP are imported only on the `tfds_vtab-*`, `clevr*` and CLIP paths, the unused `tkinter` import is gone, and the code falls back to the CPU when no GPU is present. `requirements.txt` lists what the processed VTAB-1k path needs and pins `timm==0.9.12` (timm 1.x breaks `forward_features`); torch is not pinned.
+
+**Careful with `./tune_output`.** It holds the authors' published tuning results, and `main_tune.py` skips work whose `tune_summary.csv` / `final_result.json` already exist. Point new runs elsewhere with `--tune_root` or `PETL_TUNE_DIR`. To run one seed per job, pass `--seeds <s> --final_output_name final_result_seed<s>.json` (the summary becomes `final_result_seed<s>_summary.csv`).
+
+### CPU smoke test
+
+```bash
+pip install -r requirements.txt   # CPU torch is enough
+# Real IN-21k weights (413 MB), kept out of git:
+mkdir -p pretrained_weights
+curl -L -o pretrained_weights/ViT-B_16_in21k.npz https://storage.googleapis.com/vit_models/imagenet21k/ViT-B_16.npz
+python -m pytest tests -q        # about 3 min on a laptop CPU
+```
+
+`tests/test_model_units.py` needs no weights (random init): trainable parameter counts (LoRA r=8: 294,912; AdaptFormer d=16: 304,320; VPT-Deep p=32: 294,912; VPT-Shallow p=10: 7,680; full: 85,798,656), LoRA leaves W_k untouched, VPT-Shallow prompts reach the last block. `tests/test_smoke_pipeline.py` builds a tiny random dataset in the processed VTAB-1k layout (`tests/fake_vtab.py`), runs one epoch of each method through `main_tune.py`, and a tune->final run with two configs and two seeds, then checks the result files. It uses `pretrained_weights/ViT-B_16_in21k.npz` or the file named by `PETL_TEST_WEIGHTS`, and is skipped if neither exists.
+
+----------------------------------------------------
+
 
 
 <h1 style="font-size: 100 pt;" align=center><strong>Lessons and Insights from a Unifying Study of Parameter-Efficient Fine-Tuning (PEFT) in Visual Recognition</strong></h1>
