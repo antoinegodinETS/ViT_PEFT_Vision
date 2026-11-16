@@ -1,8 +1,6 @@
 import torch
-from data.dataset.tf_dataset import TFDataset
 from data.dataset.vtab_processed import get_processed_VTAB
 from data.dataset.cifar100 import get_cifar
-from data.dataset.clevr import get_clevr
 from data.dataset.few_shot import get_fs
 from data.dataset.resisc import get_resisc
 
@@ -11,6 +9,8 @@ def get_dataset(data, params, logger):
     dataset_train, dataset_val, dataset_test = None, None, None
 
     if data.startswith("tfds_vtab-"):
+        # TensorFlow/TFDS are only needed for this branch, so import them lazily.
+        from data.dataset.tf_dataset import TFDataset
         logger.info("Loading TFDS vtab data ...")
         if params.final_run:
             logger.info("Loading training data (final training data for vtab)...")
@@ -40,6 +40,8 @@ def get_dataset(data, params, logger):
             logger.info("Loading training and validation  data (tuning for cifar100)...")
             dataset_train, dataset_val = get_cifar(params, 'trainval_split')
     elif data.startswith('clevr'):
+        # This loader goes through TensorFlow, so import it lazily.
+        from data.dataset.clevr import get_clevr
         logger.info("Loading clevr ...")
         if params.final_run:
             logger.info("Loading training data (final training data for cleevr)...")
@@ -102,7 +104,7 @@ def gen_loader(params, dataset_train, dataset_val, dataset_test):
             batch_size=params.batch_size,
             shuffle=True,
             num_workers=num_workers,
-            pin_memory=True,
+            pin_memory=torch.cuda.is_available(),
             drop_last=True
         )
     if dataset_val is not None:
@@ -111,7 +113,7 @@ def gen_loader(params, dataset_train, dataset_val, dataset_test):
             batch_size=params.test_batch_size,
             shuffle=False,
             num_workers=num_workers,
-            pin_memory=True
+            pin_memory=torch.cuda.is_available()
         )
     if dataset_test is not None:
         test_loader = torch.utils.data.DataLoader(
@@ -119,7 +121,7 @@ def gen_loader(params, dataset_train, dataset_val, dataset_test):
             batch_size=params.test_batch_size,
             shuffle=False,
             num_workers=num_workers,
-            pin_memory=True
+            pin_memory=torch.cuda.is_available()
 
         )
     return train_loader, val_loader, test_loader

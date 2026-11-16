@@ -1,11 +1,7 @@
-from tkinter.constants import RAISED
-
 import timm
 import torch
-from experiment.build_clip_zs_classifier import get_clip_proj, init_imagenet_clip
 from model.vision_transformer import VisionTransformerPETL
 from utils.log_utils import log_model_info
-from timm.data import resolve_data_config
 from utils.setup_logging import get_logger
 
 logger = get_logger("PETL_vision")
@@ -15,10 +11,7 @@ TUNE_MODULES = ['ft_attn_module', 'ft_mlp_module', 'head', 'vpt', 'ssf_scale', '
 
 
 def get_model(params):
-    if torch.cuda.is_available():
-        params.device = torch.cuda.current_device()
-    else:
-        raise Exception("No GPU available")
+    params.device = get_device()
 
     model = get_base_model(params)
 
@@ -84,8 +77,16 @@ def get_model(params):
 
     model_grad_params_no_head = log_model_info(model, logger)
 
-    model = model.cuda(device=params.device)
+    model = model.to(params.device)
     return model, tune_parameters, model_grad_params_no_head
+
+
+def get_device():
+    """Current CUDA device when a GPU is present, otherwise the CPU (local smoke tests)."""
+    if torch.cuda.is_available():
+        return torch.device('cuda', torch.cuda.current_device())
+    logger.info("No GPU available, running on CPU")
+    return torch.device('cpu')
 
 
 def get_base_model(params):
@@ -119,6 +120,8 @@ def get_base_model(params):
         model.load_pretrained(
             'pretrained_weights/ViT-B_16_clip.bin')
 
+        # CLIP is only needed for this backbone, so import it lazily.
+        from experiment.build_clip_zs_classifier import get_clip_proj, init_imagenet_clip
         fc = init_imagenet_clip(params.device)
         proj = get_clip_proj(params.device)
         model.head = torch.nn.Sequential(*[proj, fc])
