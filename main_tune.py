@@ -34,6 +34,8 @@ def main():
         default_params.normalized = bool(default_params.get('normalized', False))
     if args.seeds is not None:
         default_params.final_seeds = args.seeds
+    if args.tune_seed is not None:
+        default_params.random_seed = args.tune_seed
     if args.tune_root is not None:
         default_params.tune_root = args.tune_root
     if args.pretrained_dir is not None:
@@ -66,6 +68,9 @@ def setup_parser():
                              'Default: the value in --default (false in default_vtab_processed.yml)')
     parser.add_argument('--seeds', type=int, nargs='+', default=None,
                         help='Seeds of the final runs. Default: final_seeds in --default, else 0 1 2')
+    parser.add_argument('--tune_seed', type=int, default=None,
+                        help='Seed set before every tuning configuration (recorded as random_seed in '
+                             'tune_summary.csv). Default: random_seed in --default (42)')
     parser.add_argument('--tune_root', default=None,
                         help='Root of the tuning outputs. Default: $PETL_TUNE_DIR or ./runs/tune')
     parser.add_argument('--pretrained_dir', default=None,

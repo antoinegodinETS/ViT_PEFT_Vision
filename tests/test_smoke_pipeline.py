@@ -143,3 +143,23 @@ def test_main_py_single_run_writes_stats(workspace):
     assert result['normalized'] is False
     for field in RUN_STAT_FIELDS:
         assert field in result, field
+
+
+METRIC_FIELDS = ['train_loss', 'train_top1', 'train_top5', 'val_loss', 'val_top1', 'val_top5',
+                 'val_best_loss', 'val_best_top1', 'val_best_top5']
+
+
+def test_tuning_result_does_not_depend_on_grid_order(workspace):
+    """Each grid point is re-seeded with the tuning seed, so lr=0.001 gives the same
+    numbers whether it runs first or second in the grid."""
+    first = run_tune(workspace, 'order_first', METHOD_YAML['lora_r8'], lrs=[0.001, 0.01], seeds=[0])
+    second = run_tune(workspace, 'order_second', METHOD_YAML['lora_r8'], lrs=[0.01, 0.001], seeds=[0])
+    rows_first = read_csv(first / 'tune_summary.csv')
+    rows_second = read_csv(second / 'tune_summary.csv')
+    assert [eval(r['param_set'])['lr'] for r in rows_first] == [0.001, 0.01]
+    assert [eval(r['param_set'])['lr'] for r in rows_second] == [0.01, 0.001]
+    run_first, run_second = rows_first[0], rows_second[1]
+    for field in METRIC_FIELDS:
+        assert run_first[field] == run_second[field], field
+    for row in rows_first + rows_second:
+        assert row['random_seed'] == '42'  # the tuning seed from default_vtab_processed.yml

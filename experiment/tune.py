@@ -1,4 +1,4 @@
-from utils.misc import load_yaml, get_param
+from utils.misc import load_yaml, get_param, set_seed
 from utils.setup_logging import get_logger
 import torch
 import os
@@ -14,7 +14,14 @@ logger = get_logger("PETL_vision")
 
 
 def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
+    """Tune every grid point on train800/val200, then run the final runs with the best one.
+
+    Each grid point is re-seeded with the tuning seed (random_seed) before its model is
+    built, so model init, data order and dropout start from the same random state
+    whatever the order of the grid or the points already done.
+    """
     output_dir, data_name = update_output_dir(default_params, test)
+    tune_seed = int(default_params.random_seed)
     if len(hyper_tune_params) == 0:
         logger.info('No tunable parameters, final run')
         #if not os.path.isfile(os.path.join(default_params.output_dir, 'final_result.json')):
@@ -54,6 +61,8 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
         logger.info("Tuning with this set:")
         final_params = default_params
         final_params.update(param_set)
+        final_params.random_seed = tune_seed
+        set_seed(tune_seed)
         if isinstance(train_loader, list):
             train_loss, train_top1, train_top5 = 0, 0, 0
             val_loss, val_top1, val_top5 = 0, 0, 0
@@ -80,7 +89,7 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False):
         # debug purpose
         # train_metrics = eval_metrics = OrderedDict(
         #     [('loss', round(0.123, 2)), ('top1', round(0.123, 2)), ('top5', round(0.123, 2))])
-        extra = OrderedDict([('random_seed', final_params.random_seed),
+        extra = OrderedDict([('random_seed', tune_seed),
                              ('normalized', bool(get_param(final_params, 'normalized', False)))])
         extra.update(run_stats)
         result_tracker(param_set, train_metrics, eval_metrics, best_eval_metrics,
