@@ -1,0 +1,31 @@
+# VPT-Shallow, original-paper setting: prompts inserted once, before the first block (this
+# fork carries them through all 12 blocks). VPT-Shallow cannot reach the ~0.3M budget (200 prompts = 153,600),
+# so it is reported at this setting only. p x 768 trainable parameters without the head.
+# Per-task prompt lengths: Jia et al., "Visual Prompt Tuning" (arXiv 2203.12119),
+# Appendix, Table 13 ("Per-task fine-tuning results from Tab. 1 for VTAB-1k with a
+# pre-trained ViT-B/16"), row "Prompt length (p)" under VPT-shallow.
+# (The paper prints a Natural-group mean of 79.4; the seven values below average 79.6.
+# The Specialized and Structured means, 28.7 and 137.5, match.)
+method_name: vpt_shallow_paper
+vpt_mode: shallow
+per_task:
+  vpt_num:
+    cifar: 100
+    caltech101: 5
+    dtd: 1
+    oxford_flowers102: 200
+    oxford_iiit_pet: 50
+    svhn: 200
+    sun397: 1
+    patch_camelyon: 5
+    eurosat: 50
+    resisc45: 50
+    diabetic_retinopathy: 10
+    clevr_count: 100
+    clevr_dist: 200
+    dmlab: 100
+    kitti: 100
+    dsprites_loc: 100
+    dsprites_ori: 100
+    smallnorb_azi: 200
+    smallnorb_ele: 200

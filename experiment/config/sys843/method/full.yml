@@ -1,0 +1,5 @@
+# Full fine-tuning: every backbone weight is trained (85,798,656 parameters without the
+# head), with the lower learning-rate grid of lr_wd_full.yml. This is the baseline's
+# setting in both the VPT paper (Sec. 4.1, "Full") and Mai et al.; nothing else to set.
+method_name: full
+full: True

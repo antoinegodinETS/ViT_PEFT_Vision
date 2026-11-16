@@ -1,0 +1,28 @@
+# VPT-Deep, original-paper setting: p prompts in each of the 12 blocks,
+# 12 x p x 768 trainable parameters without the head.
+# Per-task prompt lengths: Jia et al., "Visual Prompt Tuning" (arXiv 2203.12119),
+# Appendix, Table 13 ("Per-task fine-tuning results from Tab. 1 for VTAB-1k with a
+# pre-trained ViT-B/16"), row "Prompt length (p)" under VPT-deep (group means 12.4 / 52.8 / 107.5 match the values below).
+method_name: vpt_deep_paper
+vpt_mode: deep
+per_task:
+  vpt_num:
+    cifar: 10
+    caltech101: 10
+    dtd: 10
+    oxford_flowers102: 1
+    oxford_iiit_pet: 1
+    svhn: 50
+    sun397: 5
+    patch_camelyon: 100
+    eurosat: 100
+    resisc45: 10
+    diabetic_retinopathy: 1
+    clevr_count: 50
+    clevr_dist: 200
+    dmlab: 100
+    kitti: 50
+    dsprites_loc: 10
+    dsprites_ori: 50
+    smallnorb_azi: 200
+    smallnorb_ele: 200

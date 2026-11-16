@@ -1,0 +1,8 @@
+# LoRA r=8 on W_q and W_v (this fork's LoRA adapts q and v only, separate A/B per projection).
+# 294,912 trainable parameters without the head: the ~0.3M budget setting.
+# It is also the original-paper setting: Hu et al., "LoRA" (arXiv 2106.09685), Sec. 4.2
+# ("we only apply LoRA to W_q and W_v in most experiments") and Appendix D, Table 9
+# (RoBERTa-base on GLUE: r_q = r_v = 8, alpha = 8, i.e. scale alpha/r = 1, this fork's default).
+# The LoRA paper has no VTAB-1k experiment, so there is no task-specific setting to copy.
+method_name: lora_r8
+lora_bottleneck: 8

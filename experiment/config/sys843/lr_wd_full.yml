@@ -1,0 +1,4 @@
+# Learning-rate x weight-decay grid for full fine-tuning: 4 x 4 = 16 grid points per task.
+# Lower learning rates than the PEFT grid, since all 85.8M backbone weights move.
+lr: [0.00001, 0.00003, 0.0001, 0.0003]
+wd: [0.0, 0.0001, 0.001, 0.01]

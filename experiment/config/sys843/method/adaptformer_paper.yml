@@ -1,0 +1,15 @@
+# AdaptFormer, original-paper setting: middle dimension 64, scale s = 0.1.
+# Chen et al., "AdaptFormer" (arXiv 2205.13535), Sec. 4.5 Ablation Studies, Table 3a/3c:
+# "we choose the middle dimension=64" and "we choose s = 0.10 as a default setting";
+# AdaptFormer-64 is also the setting of Table 6 (supervised IN-21k ViT-B/16).
+# The paper has no VTAB-1k experiment (its image tasks are CIFAR-100, SVHN, Food-101), so
+# this is its default image setting, not a VTAB-1k one. Kaiming-normal down-projection and
+# zero up-projection (Sec. 4.1, "Initialization") = Mai's lora_kaiming init.
+# 1,189,632 trainable parameters without the head.
+method_name: adaptformer_paper
+ft_mlp_module: adapter
+ft_mlp_mode: parallel
+ft_mlp_ln: before
+adapter_init: lora_kaiming
+adapter_bottleneck: 64
+adapter_scaler: 0.1

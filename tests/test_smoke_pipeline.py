@@ -163,3 +163,26 @@ def test_tuning_result_does_not_depend_on_grid_order(workspace):
         assert run_first[field] == run_second[field], field
     for row in rows_first + rows_second:
         assert row['random_seed'] == '42'  # the tuning seed from default_vtab_processed.yml
+
+
+def test_sys843_per_task_config_end_to_end(workspace):
+    """--sys843 picks the SYS843 method config and resolves its per-task prompt length
+    (VPT-Shallow on EuroSAT: p=50 in the VPT paper); default and grid are shrunk for speed."""
+    root, _, weights_dir = workspace
+    with open(os.path.join(REPO, 'experiment/config/sys843/default_vtab_processed.yml')) as f:
+        default = yaml.safe_load(f)
+    default.update(epoch=1, warmup_epoch=0, batch_size=4, test_batch_size=4, data_path=str(root / 'data'))
+    default_yml = root / 'sys843_default.yml'
+    default_yml.write_text(yaml.safe_dump(default))
+    lrwd_yml = root / 'sys843_lrwd.yml'
+    lrwd_yml.write_text(yaml.safe_dump({'lr': [0.001], 'wd': [0.0]}))
+    tune_root = root / 'tune_sys843'
+    cmd = [sys.executable, 'main_tune.py', '--sys843', 'vpt_shallow_paper', '--data', f'processed_vtab-{TASK}',
+           '--default', str(default_yml), '--lrwd', str(lrwd_yml), '--tune_root', str(tune_root),
+           '--pretrained_dir', str(weights_dir), '--seeds', '0']
+    proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-3000:]
+    out = tune_root / 'sys843_vtab' / 'processed_vtab' / TASK / 'vpt_shallow_paper'
+    result = json.loads((out / 'final_result.json').read_text())
+    assert result['trainable_params_no_head'] == 50 * 768
+    assert result['best_tune'] == {'lr': 0.001, 'wd': 0.0}

@@ -1,0 +1,10 @@
+# Index of the SYS843 method configs, used by `main_tune.py --sys843 <name>`.
+# tune: method config (relative to this directory); lrwd: its lr x wd grid;
+# setting: budget (~0.3M trainable parameters) and/or paper (original-paper setting).
+lora_r8:           {tune: method/lora_r8.yml,           lrwd: lr_wd_peft.yml, setting: [budget, paper]}
+adaptformer_d16:   {tune: method/adaptformer_d16.yml,   lrwd: lr_wd_peft.yml, setting: [budget]}
+adaptformer_paper: {tune: method/adaptformer_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper]}
+vpt_deep_p32:      {tune: method/vpt_deep_p32.yml,      lrwd: lr_wd_peft.yml, setting: [budget]}
+vpt_deep_paper:    {tune: method/vpt_deep_paper.yml,    lrwd: lr_wd_peft.yml, setting: [paper]}
+vpt_shallow_paper: {tune: method/vpt_shallow_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper]}
+full:              {tune: method/full.yml,              lrwd: lr_wd_full.yml, setting: [paper]}

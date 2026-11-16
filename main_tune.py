@@ -1,4 +1,5 @@
 import argparse
+import os
 from utils.setup_logging import get_logger
 from utils.misc import set_seed, str2bool
 import time
@@ -7,11 +8,76 @@ from experiment.tune import hyper_tune_final_run
 
 logger = get_logger("PETL_vision")
 
+# Mai et al.'s defaults, used when neither the file argument nor --sys843 is given.
+DEFAULT_CONFIG = 'experiment/config/default_vtab_processed.yml'
+DEFAULT_TUNE = 'experiment/config/method/lora.yml'
+DEFAULT_LRWD = 'experiment/config/lr_wd_vtab_processed.yml'
+SYS843_DIR = 'experiment/config/sys843'
+
+
 def main():
     args = setup_parser().parse_args()
+    default_params, hyper_tune_params = build_params(args)
+    set_seed(default_params.random_seed)
+    start = time.time()
+    hyper_tune_final_run(default_params, hyper_tune_params, test=args.test)
+    end = time.time()
+    logger.info(f'----------- Total Run time : {(end - start) / 60} mins-----------')
+
+
+def sys843_methods(sys843_dir=SYS843_DIR):
+    """The SYS843 method configs: {name: {tune, lrwd, setting}} from <sys843_dir>/methods.yml."""
+    return load_yaml(os.path.join(sys843_dir, 'methods.yml'))
+
+
+def resolve_config_paths(args):
+    """Fill --default/--tune/--lrwd from --sys843 <name> (SYS843 configs) or Mai's defaults.
+
+    An explicit --default/--tune/--lrwd always wins over --sys843.
+    """
+    if args.sys843 is not None:
+        methods = sys843_methods()
+        if args.sys843 not in methods:
+            raise SystemExit(f'--sys843 {args.sys843}: unknown, choose from {sorted(methods)}')
+        entry = methods[args.sys843]
+        args.default = args.default or os.path.join(SYS843_DIR, 'default_vtab_processed.yml')
+        args.tune = args.tune or os.path.join(SYS843_DIR, entry['tune'])
+        args.lrwd = args.lrwd or os.path.join(SYS843_DIR, entry['lrwd'])
+    args.default = args.default or DEFAULT_CONFIG
+    args.tune = args.tune or DEFAULT_TUNE
+    args.lrwd = args.lrwd or DEFAULT_LRWD
+    return args
+
+
+def task_name(data):
+    """processed_vtab-cifar -> cifar."""
+    return data.split('-', 1)[-1]
+
+
+def apply_per_task(method_params, task):
+    """Resolve a `per_task: {param: {task: value}}` block of a method config for one task.
+
+    Used for settings that the original papers give per task (e.g. VPT prompt lengths).
+    """
+    per_task = method_params.pop('per_task', None)
+    if not per_task:
+        return method_params
+    for param, by_task in per_task.items():
+        if task not in by_task:
+            raise SystemExit(f'per_task.{param} has no value for task {task!r}')
+        method_params[param] = by_task[task]
+    return method_params
+
+
+def build_params(args):
+    """Default config + method config + lr/wd grid -> (default_params, hyper_tune_params).
+
+    Lists in the method and lr/wd configs are tuned (every combination), scalars are fixed.
+    """
+    resolve_config_paths(args)
     default_params = load_yaml(args.default)
     default_params.data = args.data
-    method_params = load_yaml(args.tune)
+    method_params = apply_per_task(load_yaml(args.tune), task_name(args.data))
     lr_wd = load_yaml(args.lrwd)
     hyper_tune_params = {}
     method_static = {}
@@ -42,23 +108,22 @@ def main():
         default_params.pretrained_dir = args.pretrained_dir
     if args.data_path is not None:
         default_params.data_path = args.data_path
-    set_seed(default_params.random_seed)
     if args.test_bs is not None:
         default_params.test_batch_size = args.test_bs
         if args.bs is not None:
             default_params.batch_size = args.bs
-    start = time.time()
-    hyper_tune_final_run(default_params, hyper_tune_params, test=args.test)
-    end = time.time()
-    logger.info(f'----------- Total Run time : {(end - start) / 60} mins-----------')
+    return default_params, hyper_tune_params
 
 
 def setup_parser():
     parser = argparse.ArgumentParser(description='PETL_Vision_tune')
     parser.add_argument('--data', default='processed_vtab-caltech101')
-    parser.add_argument('--default', default='experiment/config/default_vtab_processed.yml')
-    parser.add_argument('--tune',  default='experiment/config/method/lora.yml')
-    parser.add_argument('--lrwd', default='experiment/config/lr_wd_vtab_processed.yml')
+    parser.add_argument('--sys843', default=None, metavar='NAME',
+                        help='Use the SYS843 configs for method NAME (see experiment/config/sys843/methods.yml): '
+                             'sets --default, --tune and --lrwd unless they are given')
+    parser.add_argument('--default', default=None, help=f'Default config. Default: {DEFAULT_CONFIG}')
+    parser.add_argument('--tune', default=None, help=f'Method config. Default: {DEFAULT_TUNE}')
+    parser.add_argument('--lrwd', default=None, help=f'lr/wd grid config. Default: {DEFAULT_LRWD}')
     parser.add_argument('--test', action='store_true', help="put results in test folder")
     parser.add_argument('--final_output_name', default='final_result.json')
     parser.add_argument('--test_bs', type=int, default=None)

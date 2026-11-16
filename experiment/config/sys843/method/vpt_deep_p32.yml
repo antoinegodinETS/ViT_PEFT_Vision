@@ -1,0 +1,5 @@
+# VPT-Deep at the ~0.3M budget: 32 prompts in each of the 12 blocks,
+# 12 x 32 x 768 = 294,912 trainable parameters without the head.
+method_name: vpt_deep_p32
+vpt_mode: deep
+vpt_num: 32

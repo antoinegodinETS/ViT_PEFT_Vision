@@ -1,0 +1,10 @@
+# AdaptFormer at the ~0.3M budget: bottleneck (middle dimension) 16 in every block's MLP,
+# 304,320 trainable parameters without the head. The scale s is tuned over {0.1, 0.2}
+# (2 x 20 lr/wd = 40 grid points). Module settings as in Mai's method/adaptformer.yml.
+method_name: adaptformer_d16
+ft_mlp_module: adapter
+ft_mlp_mode: parallel
+ft_mlp_ln: before
+adapter_init: lora_kaiming
+adapter_bottleneck: 16
+adapter_scaler: [0.1, 0.2]
