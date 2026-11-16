@@ -13,6 +13,7 @@ class VPT(nn.Module):
         self.params = params
         self.depth = depth
         if params.vpt_mode == 'shallow':
+            # one set of prompts, prepended before block 0 and kept through all blocks
             prompt_layer = 1
         elif params.vpt_mode == 'deep':
             if params.vpt_layer:

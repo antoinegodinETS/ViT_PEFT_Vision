@@ -237,8 +237,13 @@ class VisionTransformerPETL(VisionTransformer):
                     x = x[:, self.params.vqt_num:, :]
                     self.query_outputs.append(F.normalize(x[:, :self.params.vqt_num, :]))
 
-                if self.params.vpt_mode and prompt is not None:
+                # VPT-Deep: drop this layer's prompt outputs; the next layer gets fresh prompts.
+                if self.params.vpt_mode == 'deep' and prompt is not None:
                     x = x[:, self.params.vpt_num:, :]
+            # VPT-Shallow: the prompts prepended before block 0 travel through every
+            # block and are removed only after the last one.
+            if self.params.vpt_mode == 'shallow':
+                x = x[:, self.params.vpt_num:, :]
             ############# Added module end #############
             # x = self.blocks(x)
         x = self.norm(x)
