@@ -1,7 +1,7 @@
 #!/bin/bash
 # Hyperparameter search for ONE (SYS843 method config, task): every grid point of the config's
-# lr x wd grid (20 points, 40 for adaptformer_d16, 16 for full) on train800, selected on the
-# final-epoch val200 accuracy. No final run here: that is final.sbatch, on a full H100.
+# lr x wd grid (20 points for every config) on train800, selected on the final-epoch val200
+# accuracy (near-ties broken by the rule in experiment/selection.py). No final run here: that is final.sbatch, on a full H100.
 # Output: $SYS843_RUNS/sys843_vtab/processed_vtab/<task>/<method>/tune_summary.csv.
 #
 # Submit from a login node (the account comes from env.sh), one job per (method, task):
@@ -21,8 +21,7 @@
 #
 # Time: a grid point is 100 epochs x 768 images plus one val200 pass, about 4 PFLOP for
 # ViT-B/16 at 197 tokens, roughly 5 min on 3/7 of an H100 in fp32; VPT with p=200 doubles the
-# tokens (about 2.2x the time). Estimates: 20 points ~2 h, adaptformer_d16 (40) ~4 h, the
-# p=200 VPT tasks ~4.5 h. The 12 h limit is about 2.5x the slowest estimate; the pilot replaces
+# tokens (about 2.2x the time). Estimates: 20 points ~2 h, the p=200 VPT tasks ~4.5 h. The 12 h limit is about 2.5x the slowest estimate; the pilot replaces
 # these guesses (train_time_s in tune_summary.csv).
 # Resumable: Slurm sends USR1 5 minutes before the limit; the job stops main_tune.py and
 # resubmits itself to start after this job ends (up to SYS843_MAX_CHUNKS jobs). Finished grid

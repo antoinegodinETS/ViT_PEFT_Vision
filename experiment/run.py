@@ -18,6 +18,7 @@ import time
 import csv
 import numpy as np
 from utils.setup_logging import get_logger
+from experiment.selection import select_best_tune, DEFAULT_TIE_TOLERANCE
 
 logger = get_logger("PETL_vision")
 
@@ -86,7 +87,7 @@ def collect_prediction(default_params):
     with open(os.path.join(default_params.output_dir, 'tune_summary.csv'), newline='') as f:
         tune_summary = list(csv.reader(f))[1:]
 
-    best_tune = eval(sorted(tune_summary, key=lambda x: float(x[5]))[-1][0])
+    best_tune, _ = select_best_tune(tune_summary, True, tie_tolerance(default_params))
 
     logger.info(f'get best tune {best_tune}')
     final_params = default_params
@@ -129,6 +130,13 @@ def final_seeds(params):
     return [int(seed) for seed in seeds]
 
 
+def tie_tolerance(params):
+    """Tie tolerance of the grid-point selection, in percentage points (--tie_tolerance /
+    tie_tolerance in the config, default 0.5 = one image of val200)."""
+    tol = get_param(params, 'tie_tolerance', None)
+    return DEFAULT_TIE_TOLERANCE if tol is None else float(tol)
+
+
 def summary_name_for(result_name):
     """final_result.json -> final_summary.csv; any other result name X.json -> X_summary.csv."""
     if result_name == 'final_result.json':
@@ -163,12 +171,14 @@ def final_run(default_params, sum_name=None, result_name='final_result.json'):
         return
     with open(os.path.join(default_params.output_dir, 'tune_summary.csv'), newline='') as f:
         tune_summary = list(csv.reader(f))[1:]
-    if default_params.final_acc_hp:
-        # use final acc to select best tune
-        best_tune = eval(sorted(tune_summary, key=lambda x: float(x[5]))[-1][0])
-    else:
-        # use best val acc along training to select best tune
-        best_tune = eval(sorted(tune_summary, key=lambda x: float(x[8]))[-1][0])
+    # final_acc_hp: select on the final-epoch val accuracy, else on the best one along training;
+    # near-ties are broken by the rule in experiment/selection.py.
+    best_tune, selection = select_best_tune(tune_summary, bool(default_params.final_acc_hp),
+                                            tie_tolerance(default_params))
+    with open(os.path.join(default_params.output_dir, 'tune_selection.json'), 'w') as f:
+        json.dump(selection, f, indent=2)
+    logger.info(f'selected {best_tune}: {selection["n_tied"]} grid point(s) within '
+                f'{selection["tolerance_pp"]} pp of the best val accuracy {selection["best_val_acc"]}')
     final_params = default_params
     final_params.update(best_tune)
     final_params.early_patience = 100
@@ -232,6 +242,7 @@ def final_run(default_params, sum_name=None, result_name='final_result.json'):
         ('normalized', bool(get_param(final_params, 'normalized', False))),
         ('epochs', final_params.epoch),
         ('best_tune', best_tune),
+        ('selection', selection),
         ('per_seed', rows),
     ])
     with open(os.path.join(final_params.output_dir, result_name), 'w') as f:

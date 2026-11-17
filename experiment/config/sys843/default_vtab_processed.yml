@@ -7,8 +7,11 @@
 #   - eval_freq (200) > epoch (100): the validation set is evaluated once, after the last
 #     epoch, and final_acc_hp: true selects the grid point with the best final-epoch
 #     validation accuracy (column val_top1 of tune_summary.csv);
+#   - tie_tolerance: grid points within 0.5 percentage points (one image of val200) of the
+#     best are tied; the lowest lr, then the lowest wd, wins (experiment/selection.py);
 #   - random_seed is the tuning seed, set again before every grid point;
-#     final_seeds are the seeds of the final runs on train800val200 (test once, last epoch).
+#     final_seeds are the seeds of the final runs on train800val200 (test once, last epoch);
+#     the two are disjoint (42 vs 0, 1, 2).
 # lr and wd come from lr_wd_peft.yml / lr_wd_full.yml; the method from method/*.yml.
 experiment_name: sys843_vtab
 pretrained_weights: vit_base_patch16_224_in21k
@@ -71,4 +74,5 @@ early_patience: 100
 store_ckp: False
 merge_factor: 1
 final_acc_hp: True
+tie_tolerance: 0.5
 final_seeds: [0, 1, 2]

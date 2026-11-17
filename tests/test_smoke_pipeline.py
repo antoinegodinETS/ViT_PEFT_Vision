@@ -127,6 +127,10 @@ def test_tune_then_final_with_two_seeds(workspace):
     assert result['avg_acc'] == pytest.approx(sum(result['accs']) / 2)
     assert result['std_acc'] is not None and result['std_train_time_s'] is not None
     assert result['best_tune']['lr'] in (0.001, 0.01)
+    selection = json.loads((out / 'tune_selection.json').read_text())
+    assert result['selection'] == selection
+    assert selection['selected'] == result['best_tune'] and selection['n_grid_points'] == 2
+    assert selection['tolerance_pp'] == 0.5 and 1 <= selection['n_tied'] <= 2
     assert 'avg_best_acc' not in result  # no best-over-epochs test number any more
 
     summary = read_csv(out / 'final_summary.csv')
@@ -196,6 +200,30 @@ def test_sys843_per_task_config_end_to_end(workspace):
     result = json.loads((out / 'final_result.json').read_text())
     assert result['trainable_params_no_head'] == 50 * 768
     assert result['best_tune'] == {'lr': 0.001, 'wd': 0.0}
+
+
+def test_sys843_vpt_sgd_check_end_to_end(workspace):
+    """The VPT SGD check config runs through main_tune.py with SGD and the scaled lr
+    (base lr 1.0 x batch 4 / 256); tie tolerance from --tie_tolerance."""
+    root, _, weights_dir = workspace
+    with open(os.path.join(REPO, 'experiment/config/sys843/default_vtab_processed.yml')) as f:
+        default = yaml.safe_load(f)
+    default.update(epoch=1, warmup_epoch=0, batch_size=4, test_batch_size=4, data_path=str(root / 'data'))
+    default_yml = root / 'sgd_default.yml'
+    default_yml.write_text(yaml.safe_dump(default))
+    lrwd_yml = root / 'sgd_lrwd.yml'
+    lrwd_yml.write_text(yaml.safe_dump({'lr': [1.0], 'wd': [0.0]}))
+    tune_root = root / 'tune_sgd'
+    cmd = [sys.executable, 'main_tune.py', '--sys843', 'vpt_deep_p32_sgd', '--data', f'processed_vtab-{TASK}',
+           '--default', str(default_yml), '--lrwd', str(lrwd_yml), '--tune_root', str(tune_root),
+           '--pretrained_dir', str(weights_dir), '--seeds', '0', '--tie_tolerance', '1.0']
+    proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-3000:]
+    assert 'lr 1.0 x batch 4 / 256 = 0.015625' in proc.stdout + proc.stderr
+    out = tune_root / 'sys843_vtab' / 'processed_vtab' / TASK / 'vpt_deep_p32_sgd'
+    result = json.loads((out / 'final_result.json').read_text())
+    assert result['trainable_params_no_head'] == 294_912
+    assert result['selection']['tolerance_pp'] == 1.0
 
 
 def test_tune_and_final_stages_run_separately(workspace):

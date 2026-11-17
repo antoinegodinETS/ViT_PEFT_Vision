@@ -88,3 +88,19 @@ sys843_check_method() {
         return 2
     fi
 }
+
+# The 3 pilot tasks: the only tasks a sanity-check config (setting `check` in methods.yml,
+# e.g. vpt_deep_p32_sgd) runs on.
+export SYS843_PILOT_TASKS="oxford_flowers102 eurosat clevr_count"
+
+# Names of the configs of the 19-task sweep: every methods.yml entry whose setting is not `check`.
+#     METHODS="$(sys843_sweep_methods)"
+sys843_sweep_methods() {
+    grep -E '^[a-z0-9_]+:' "$SYS843_REPO/experiment/config/sys843/methods.yml" \
+        | grep -vE 'setting: *\[[^]]*\bcheck\b' | cut -d: -f1 | tr '\n' ' ' | sed 's/ $//'
+}
+
+# Success if config $1 is a sanity check (setting `check` in methods.yml).
+sys843_is_check_method() {
+    grep -qE "^$1:.*setting: *\[[^]]*\bcheck\b" "$SYS843_REPO/experiment/config/sys843/methods.yml"
+}

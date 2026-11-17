@@ -1,5 +1,8 @@
 """The SYS843 configs (experiment/config/sys843) load through main_tune.py and give the
 expected trainable-parameter counts and grid sizes. Random init, no weights needed."""
+import os
+import subprocess
+
 import pytest
 from sklearn.model_selection import ParameterGrid
 
@@ -37,16 +40,23 @@ VPT_PAPER_P = {
 
 def expected_no_head(name, task):
     fixed = {'lora_r8': 294_912, 'adaptformer_d16': 304_320, 'adaptformer_paper': 1_189_632,
-             'vpt_deep_p32': 294_912, 'full': 85_798_656}
+             'vpt_deep_p32': 294_912, 'vpt_deep_p32_sgd': 294_912, 'full': 85_798_656}
     if name in fixed:
         return fixed[name]
     shallow, deep = VPT_PAPER_P[task]
     return {'vpt_shallow_paper': shallow * 768, 'vpt_deep_paper': 12 * deep * 768}[name]
 
 
-EXPECTED_GRID_POINTS = {'lora_r8': 20, 'adaptformer_d16': 40, 'adaptformer_paper': 20, 'vpt_deep_p32': 20,
-                        'vpt_deep_paper': 20, 'vpt_shallow_paper': 20, 'full': 16}
+EXPECTED_GRID_POINTS = {'lora_r8': 20, 'adaptformer_d16': 20, 'adaptformer_paper': 20, 'vpt_deep_p32': 20,
+                        'vpt_deep_paper': 20, 'vpt_shallow_paper': 20, 'full': 20, 'vpt_deep_p32_sgd': 20}
 METHODS = list(EXPECTED_GRID_POINTS)
+SWEEP_METHODS = ['lora_r8', 'adaptformer_d16', 'adaptformer_paper', 'vpt_deep_p32', 'vpt_deep_paper',
+                 'vpt_shallow_paper', 'full']
+CHECK_METHODS = ['vpt_deep_p32_sgd']
+PILOT_TASKS = ['oxford_flowers102', 'eurosat', 'clevr_count']
+PEFT_LRS = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
+GRID_LRS = {'full': [3e-6, 1e-5, 3e-5, 1e-4, 3e-4], 'vpt_deep_p32_sgd': [25.0, 5.0, 1.0, 0.25, 0.05]}
+GRID_WDS = {'vpt_deep_p32_sgd': [0.01, 0.001, 0.0001, 0.0]}
 
 
 @pytest.fixture(autouse=True)
@@ -75,12 +85,16 @@ def test_index_lists_every_method():
 def test_config_loads_with_expected_grid_and_protocol(name):
     params, grid = load(name, 'eurosat')
     assert len(ParameterGrid(grid)) == EXPECTED_GRID_POINTS[name]
-    lrs = {'full': [1e-5, 3e-5, 1e-4, 3e-4]}.get(name, [1e-4, 3e-4, 1e-3, 3e-3, 1e-2])
-    assert grid['lr'] == lrs and grid['wd'] == [0.0, 1e-4, 1e-3, 1e-2]
+    assert set(grid) == {'lr', 'wd'}  # no method hyperparameter is searched
+    assert grid['lr'] == GRID_LRS.get(name, PEFT_LRS)
+    assert grid['wd'] == GRID_WDS.get(name, [0.0, 1e-4, 1e-3, 1e-2])
     assert params.method_name == name
     assert params.experiment_name == 'sys843_vtab'
     assert params.pretrained_weights == 'vit_base_patch16_224_in21k'
-    assert params.optimizer == 'adamw' and params.epoch == 100 and params.warmup_epoch == 10
+    assert params.optimizer == ('sgd' if name == 'vpt_deep_p32_sgd' else 'adamw')
+    assert params.epoch == 100 and params.warmup_epoch == 10
+    assert params.tie_tolerance == 0.5
+    assert params.random_seed == 42 and 42 not in list(params.final_seeds)  # tuning and final seeds disjoint
     assert params.normalized is False and params.final_acc_hp is True
     assert params.eval_freq > params.epoch  # validation only after the last epoch
     assert list(params.final_seeds) == [0, 1, 2]
@@ -109,7 +123,7 @@ def test_vpt_paper_per_task_prompt_lengths(name):
 def test_explicit_file_arguments_override_sys843():
     args = main_tune.setup_parser().parse_args(['--sys843', 'lora_r8', '--lrwd', 'experiment/config/sys843/lr_wd_full.yml'])
     _, grid = main_tune.build_params(args)
-    assert grid['lr'] == [1e-5, 3e-5, 1e-4, 3e-4]
+    assert grid['lr'] == GRID_LRS['full']
 
 
 def test_mai_defaults_unchanged_without_sys843():
@@ -121,3 +135,57 @@ def test_mai_defaults_unchanged_without_sys843():
 def test_unknown_task_in_per_task_config_fails():
     with pytest.raises(SystemExit):
         load('vpt_deep_paper', 'not_a_task')
+
+
+def test_adaptformer_scale_is_fixed_at_paper_default():
+    for name in ('adaptformer_d16', 'adaptformer_paper'):
+        params, grid = load(name, 'eurosat')
+        assert params.adapter_scaler == 0.1 and 'adapter_scaler' not in grid
+
+
+def test_vpt_sgd_check_uses_vpt_paper_recipe():
+    params, _ = load('vpt_deep_p32_sgd', 'eurosat')
+    assert params.vpt_mode == 'deep' and params.vpt_num == 32
+    assert params.optimizer == 'sgd' and params.momentum == 0.9 and params.lr_base_batch == 256
+    assert params.batch_size == 64  # peak lr = base lr x 64 / 256
+
+
+def test_sweep_and_check_methods():
+    assert main_tune.sys843_sweep_methods() == SWEEP_METHODS
+    assert main_tune.sys843_check_methods() == CHECK_METHODS
+
+
+def grid_size(name):
+    return len(ParameterGrid(load(name, 'eurosat')[1]))
+
+
+def test_run_counts():
+    """The counts stated in experiment/config/sys843/README.md, from the configs themselves."""
+    per_task = sum(grid_size(m) for m in main_tune.sys843_sweep_methods())
+    assert per_task == 140
+    assert per_task * len(VTAB_DATASETS) == 2_660
+    assert len(main_tune.sys843_sweep_methods()) * len(VTAB_DATASETS) * 3 == 399
+    check = main_tune.sys843_check_methods()
+    assert sum(grid_size(m) for m in check) * len(PILOT_TASKS) == 60
+    assert len(check) * len(PILOT_TASKS) * 3 == 9
+
+
+def bash(script, env=None):
+    full_env = dict(os.environ, SYS843_REPO=REPO, **(env or {}))
+    return subprocess.run(['bash', '-c', f'source scripts/rorqual/env.sh; {script}'], cwd=REPO,
+                          capture_output=True, text=True, env=full_env)
+
+
+def test_env_sh_lists_the_same_sweep_methods():
+    proc = bash('sys843_sweep_methods; echo; echo "$SYS843_PILOT_TASKS"')
+    assert proc.returncode == 0, proc.stderr
+    sweep, pilot = proc.stdout.splitlines()
+    assert sweep.split() == SWEEP_METHODS and pilot.split() == PILOT_TASKS
+
+
+def test_run_tasks_skips_check_config_outside_the_pilot(tmp_path):
+    """run_tasks.sh skips a check config on a non-pilot task before staging any data."""
+    proc = bash('bash scripts/rorqual/run_tasks.sh tune vpt_deep_p32_sgd cifar dtd',
+                env={'SYS843_RUNS': str(tmp_path)})
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.count('not a pilot task') == 2

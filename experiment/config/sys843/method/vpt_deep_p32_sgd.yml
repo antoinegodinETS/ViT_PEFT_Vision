@@ -1,0 +1,16 @@
+# Sanity check, not part of the 19-task sweep (setting `check` in methods.yml): VPT-Deep with
+# 32 prompts per block (as vpt_deep_p32, 294,912 trainable parameters without the head),
+# tuned with the VPT paper's own recipe instead of the shared AdamW one, on the 3 pilot tasks
+# (oxford_flowers102, eurosat, clevr_count). It checks that the shared AdamW protocol does not
+# disadvantage VPT.
+# Jia et al., "Visual Prompt Tuning" (arXiv 2203.12119), Appendix A.1 and Table 6: SGD with
+# momentum 0.9, cosine schedule with warmup, 100 epochs, 10 warmup epochs, and
+# lr = base_lr x batch_size / 256. The base lr x wd grid is lr_wd_vpt_sgd.yml (20 points).
+# Batch 64 (the shared protocol), so the peak lr is base_lr / 4. Everything else (epochs,
+# warmup, warmup_lr_init, lr_min, drop-path, data) is the shared default_vtab_processed.yml.
+method_name: vpt_deep_p32_sgd
+vpt_mode: deep
+vpt_num: 32
+optimizer: sgd
+momentum: 0.9
+lr_base_batch: 256

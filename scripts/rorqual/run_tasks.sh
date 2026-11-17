@@ -6,6 +6,8 @@
 # A final run whose final_result.json exists is skipped without staging its data; main_tune.py
 # itself skips tuned grid points. On SIGTERM (sent by sys843_run_resumable at Slurm's USR1
 # warning) the running main_tune.py is stopped and the script exits.
+# A sanity-check config (setting `check` in methods.yml, e.g. vpt_deep_p32_sgd) runs only on the
+# pilot tasks ($SYS843_PILOT_TASKS); other tasks are skipped unless SYS843_CHECK_ANY_TASK=1.
 set -euo pipefail
 
 stage="$1"
@@ -21,6 +23,12 @@ trap 'echo "SIGTERM: stopping main_tune.py"; [ -z "$child" ] || kill -TERM "$chi
 workers=$(( ${SLURM_CPUS_PER_TASK:-2} - 1 ))
 failed=0
 for task in "$@"; do
+    if sys843_is_check_method "$method" && [ "${SYS843_CHECK_ANY_TASK:-0}" != 1 ] \
+        && ! [[ " $SYS843_PILOT_TASKS " == *" $task "* ]]; then
+        echo "== $method / $task: check config, not a pilot task ($SYS843_PILOT_TASKS), skipping" \
+            "(set SYS843_CHECK_ANY_TASK=1 to run it anyway)"
+        continue
+    fi
     out="$SYS843_RUNS/sys843_vtab/processed_vtab/$task/$method"
     if [ "$stage" = final ] && [ -f "$out/final_result.json" ]; then
         echo "== $method / $task: final_result.json exists, skipping"

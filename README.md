@@ -13,7 +13,7 @@ This fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Visio
 - **`normalized` is explicit**: default `false` in both `main.py` and `main_tune.py` (as in the published `default_vtab_processed.yml`: resize to 224 and scale to [0, 1], no ImageNet mean/std). Set it with `--normalized {true,false}`; it is recorded in the result files.
 - **Lighter dependencies**: TensorFlow/TFDS and CLIP are imported only on the `tfds_vtab-*`, `clevr*` and CLIP paths, the unused `tkinter` import is gone, and the code falls back to the CPU when no GPU is present. `requirements.txt` lists what the processed VTAB-1k path needs and pins `timm==0.9.12` (timm 1.x breaks `forward_features`); torch is not pinned.
 - **Upstream's published results are removed.** The `tune_output/` folder (Mai et al.'s `tune_summary.csv` / `final_result.json` files) is deleted from the fork (git history keeps it). `main_tune.py` skips any configuration already listed in `tune_summary.csv` and any final run whose `final_result.json` exists, so those files could silently stand in for our runs. The default tuning root is now `./runs/tune` (test runs: `./runs/tune_test`); `runs/` and `tune_output/` are gitignored. `main_tune.py` still resumes from **our own** earlier results in the tuning root, so start from an empty `--tune_root` for a fresh run.
-- **SYS843 configs** in [`experiment/config/sys843/`](experiment/config/sys843/README.md) (Mai's configs are untouched). They hold the protocol default, the lr x wd grids (PEFT 5 x 4, full fine-tuning 4 x 4), budget configs at ~0.3M trainable parameters (LoRA r=8, AdaptFormer d=16, VPT-Deep p=32) and original-paper configs with citations (AdaptFormer d=64 s=0.1, VPT-Shallow and VPT-Deep with the VPT paper's per-task prompt lengths, full fine-tuning). Run one with `python main_tune.py --sys843 <name> --data processed_vtab-<task> ...`. A method config may give per-task values in a `per_task:` block. The linked README lists every config, its parameter count and its grid size.
+- **SYS843 configs** in [`experiment/config/sys843/`](experiment/config/sys843/README.md) (Mai's configs are untouched). They hold the protocol default, the lr x wd grids (PEFT 5 x 4, full fine-tuning 5 x 4: 20 points for every config), budget configs at ~0.3M trainable parameters without the head (LoRA r=8, AdaptFormer d=16 s=0.1, VPT-Deep p=32) and original-paper configs with citations (AdaptFormer's default image setting d=64 s=0.1, VPT-Shallow and VPT-Deep with the VPT paper's per-task prompt lengths, full fine-tuning), plus a pilot-only check of VPT-Deep under the VPT paper's SGD recipe (`vpt_deep_p32_sgd`). The grid point is selected with a fixed tie-break rule (within 0.5 pp of the best validation accuracy, lowest lr then lowest wd; `--tie_tolerance`), recorded in `tune_selection.json` and `final_result.json`. SGD runs can scale the lr with the batch size (`lr_base_batch`). Run one with `python main_tune.py --sys843 <name> --data processed_vtab-<task> ...`. A method config may give per-task values in a `per_task:` block. The linked README lists every config, its parameter count and its grid size.
 - **Stages**: `main_tune.py --stage tune` stops after the search, and `--stage final` runs only the final seeds (it fails if a grid point is missing). The default `all` does both, as before. Tuning and final runs can therefore use different GPUs. `--num_workers` sets the DataLoader workers (default 4, as before).
 - **Data and weights scripts** in [`scripts/data/`](scripts/data/README.md). They download V-PETL's `vtab-1k.zip` from Hugging Face and check its size and sha256, repack it into 19 per-task tarballs, download `ViT-B_16.npz` under the name the code loads, stage one task into a job's local disk, and check the split files (800 / 200 / 1000 / VPT test sizes).
 - **Rorqual job scripts** in `scripts/rorqual/`; see [Running on Rorqual](#running-on-rorqual) below.
@@ -30,12 +30,12 @@ curl -L -o pretrained_weights/ViT-B_16_in21k.npz https://storage.googleapis.com/
 python -m pytest tests -q        # about 3 min on a laptop CPU
 ```
 
-`tests/test_model_units.py` needs no weights (random init). It checks the trainable parameter counts (LoRA r=8: 294,912; AdaptFormer d=16: 304,320; VPT-Deep p=32: 294,912; VPT-Shallow p=10: 7,680; full: 85,798,656), that LoRA leaves W_k untouched, and that VPT-Shallow prompts reach the last block. `tests/test_sys843_configs.py` loads every SYS843 config through `main_tune.py`. It checks the parameter counts (VPT paper settings for all 19 tasks), the grid sizes and the protocol settings. `tests/test_data_scripts.py` runs the data scripts on a tiny synthetic `vtab-1k.zip`. `tests/test_no_bundled_results.py` checks that no result files are tracked.
+`tests/test_model_units.py` needs no weights (random init). It checks the trainable parameter counts (LoRA r=8: 294,912; AdaptFormer d=16: 304,320; VPT-Deep p=32: 294,912; VPT-Shallow p=10: 7,680; full: 85,798,656), that LoRA leaves W_k untouched, and that VPT-Shallow prompts reach the last block. `tests/test_sys843_configs.py` loads every SYS843 config through `main_tune.py`. It checks the parameter counts (VPT paper settings for all 19 tasks), the grid sizes, the run counts, the protocol settings and that `run_tasks.sh` keeps the check config to the pilot tasks. `tests/test_selection.py` checks the tie-break rule and the SGD lr scaling. `tests/test_data_scripts.py` runs the data scripts on a tiny synthetic `vtab-1k.zip`. `tests/test_no_bundled_results.py` checks that no result files are tracked.
 
 `tests/test_smoke_pipeline.py` builds a tiny random dataset in the processed VTAB-1k layout (`tests/fake_vtab.py`). It runs one epoch of each method through `main_tune.py`, then a tune->final run with two configs and two seeds, and checks the result files. It also checks:
 - that a grid point gives the same numbers whether it runs first or second;
 - that `--stage tune` and `--stage final` work in turn;
-- that `--sys843` works end to end with a per-task config.
+- that `--sys843` works end to end with a per-task config and with the SGD check config.
 
 It uses `pretrained_weights/ViT-B_16_in21k.npz` or the file named by `PETL_TEST_WEIGHTS`, and is skipped if neither exists. On a GPU (`check_env.sbatch`) the same tests expect CUDA in the result files.
 
@@ -45,12 +45,12 @@ The scripts in `scripts/rorqual/` follow the pattern of the SYS819 project's Ror
 
 | File | What it does |
 |---|---|
-| `env.sh` | The one place the account is set (`SBATCH_ACCOUNT=def-chdesa`). It also sets the paths: `$SYS843_DATA_STORE` (zip), `$SYS843_TARS` (per-task tarballs), `$SYS843_WEIGHTS` and `$SYS843_RUNS` (results, outside the repository). Helpers: `sys843_activate` (module and venv), `sys843_stage_task` (extract one task to `$SLURM_TMPDIR`) and `sys843_run_resumable` (on Slurm's USR1 warning, stop and resubmit after this job). Source it before every `sbatch`. |
+| `env.sh` | The one place the account is set (`SBATCH_ACCOUNT=def-chdesa`). It also sets the paths: `$SYS843_DATA_STORE` (zip), `$SYS843_TARS` (per-task tarballs), `$SYS843_WEIGHTS` and `$SYS843_RUNS` (results, outside the repository). Helpers: `sys843_activate` (module and venv), `sys843_stage_task` (extract one task to `$SLURM_TMPDIR`) and `sys843_run_resumable` (on Slurm's USR1 warning, stop and resubmit after this job), `sys843_sweep_methods` (the sweep configs, without the `check` ones) and `$SYS843_PILOT_TASKS`. Source it before every `sbatch`. |
 | `setup_env.sh` | Login node. Creates `~/venvs/sys843-vit-peft` with `module load StdEnv/2023 python/3.11`, `virtualenv --no-download` and wheelhouse installs (`pip --no-index`). `timm==0.9.12` is not in the wheelhouse and comes from PyPI as a prebuilt wheel (`--only-binary=:all:`, so nothing is compiled on the login node). It then verifies the imports. Safe to rerun on an existing venv. |
 | `check_env.sbatch` | One full H100, 30 min. Runs `nvidia-smi`, prints the versions, checks the weights and tarball checksums, stages EuroSAT, and runs the test suite on the GPU. |
 | `tune.sbatch` | One (method config, task) search with `--stage tune`, 12 h limit, resumable. Runs on a **3g.40gb** MIG slice by default (see below). |
 | `final.sbatch` | The 3 seeds of one method config on one or more tasks (`SYS843_TASKS`) with `--stage final`, on a full H100, 4 h limit, resumable. The only source of the time and memory numbers in the report. |
-| `run_tasks.sh` | Shared by both job scripts: for each task, stage the data, run `main_tune.py`, then free the local disk. |
+| `run_tasks.sh` | Shared by both job scripts: for each task, stage the data, run `main_tune.py`, then free the local disk. A `check` config runs on the pilot tasks only (`SYS843_CHECK_ANY_TASK=1` overrides). |
 
 **Why 3g.40gb and not 1g.10gb for the search.** The code trains in fp32 at batch 64. The VPT paper (Table 12, A100, batch 64) measures 9.8 to 10.3 GB peak training memory for adapters and VPT with p=1, 11.7 GB for full fine-tuning and 25.8 GB for VPT with p=200. A 1g.10gb slice has 10 GB. After the pilot, `peak_memory_reserved_mib` in `tune_summary.csv` shows which configs fit the small slice; pass `--gpus=nvidia_h100_80gb_hbm3_1g.10gb:1 --cpus-per-task=2` to `sbatch` for those.
 
@@ -66,15 +66,16 @@ scripts/data/download_weights.sh "$SYS843_WEIGHTS"
 sbatch "$SYS843_REPO/scripts/rorqual/check_env.sbatch"        # must end with RESULT ok
 
 # 2. Pilot: every method config on Flowers-102, EuroSAT and CLEVR-count
-METHODS="lora_r8 adaptformer_d16 adaptformer_paper vpt_deep_p32 vpt_deep_paper vpt_shallow_paper full"
-for m in $METHODS; do for t in oxford_flowers102 eurosat clevr_count; do
+METHODS="$(sys843_sweep_methods)"   # the 7 sweep configs; the check config vpt_deep_p32_sgd is left out
+for m in $METHODS; do for t in $SYS843_PILOT_TASKS; do
     sbatch --job-name=sys843-tune-$m-$t --export=ALL,SYS843_METHOD=$m,SYS843_TASK=$t "$SYS843_REPO/scripts/rorqual/tune.sbatch"
 done; done
 # when they are done:
 for m in $METHODS; do
-    sbatch --job-name=sys843-final-$m --export=ALL,SYS843_METHOD=$m,SYS843_TASKS="oxford_flowers102 eurosat clevr_count" \
+    sbatch --job-name=sys843-final-$m --export=ALL,SYS843_METHOD=$m,SYS843_TASKS="$SYS843_PILOT_TASKS" \
         "$SYS843_REPO/scripts/rorqual/final.sbatch"
 done
+# Pilot only: the VPT SGD check (vpt_deep_p32_sgd), see experiment/config/sys843/README.md.
 # Check train_time_s and peak_memory_reserved_mib in the tune_summary.csv / final_result.json
 # files under $SYS843_RUNS/sys843_vtab/, then adjust --time or the MIG slice before the sweep.
 

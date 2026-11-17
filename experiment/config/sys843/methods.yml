@@ -1,6 +1,9 @@
 # Index of the SYS843 method configs, used by `main_tune.py --sys843 <name>`.
 # tune: method config (relative to this directory); lrwd: its lr x wd grid;
-# setting: budget (~0.3M trainable parameters) and/or paper (original-paper setting).
+# setting: budget (~0.3M trainable parameters without the head) and/or paper (the original
+# paper's setting), or check: a sanity check run on the 3 pilot tasks only (oxford_flowers102,
+# eurosat, clevr_count), never part of the 19-task sweep (main_tune.sys843_sweep_methods,
+# sys843_sweep_methods in scripts/rorqual/env.sh).
 lora_r8:           {tune: method/lora_r8.yml,           lrwd: lr_wd_peft.yml, setting: [budget, paper]}
 adaptformer_d16:   {tune: method/adaptformer_d16.yml,   lrwd: lr_wd_peft.yml, setting: [budget]}
 adaptformer_paper: {tune: method/adaptformer_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper]}
@@ -8,3 +11,4 @@ vpt_deep_p32:      {tune: method/vpt_deep_p32.yml,      lrwd: lr_wd_peft.yml, se
 vpt_deep_paper:    {tune: method/vpt_deep_paper.yml,    lrwd: lr_wd_peft.yml, setting: [paper]}
 vpt_shallow_paper: {tune: method/vpt_shallow_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper]}
 full:              {tune: method/full.yml,              lrwd: lr_wd_full.yml, setting: [paper]}
+vpt_deep_p32_sgd:  {tune: method/vpt_deep_p32_sgd.yml,  lrwd: lr_wd_vpt_sgd.yml, setting: [check]}

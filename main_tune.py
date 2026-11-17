@@ -30,6 +30,23 @@ def sys843_methods(sys843_dir=SYS843_DIR):
     return load_yaml(os.path.join(sys843_dir, 'methods.yml'))
 
 
+# Setting of the sanity-check configs (e.g. vpt_deep_p32_sgd): run on the pilot tasks only,
+# never part of the 19-task sweep.
+CHECK_SETTING = 'check'
+
+
+def sys843_sweep_methods(sys843_dir=SYS843_DIR):
+    """Names of the configs of the 19-task sweep: every config whose setting is not `check`."""
+    return [name for name, entry in sys843_methods(sys843_dir).items()
+            if CHECK_SETTING not in entry['setting']]
+
+
+def sys843_check_methods(sys843_dir=SYS843_DIR):
+    """Names of the sanity-check configs (setting `check`), run on the pilot tasks only."""
+    return [name for name, entry in sys843_methods(sys843_dir).items()
+            if CHECK_SETTING in entry['setting']]
+
+
 def resolve_config_paths(args):
     """Fill --default/--tune/--lrwd from --sys843 <name> (SYS843 configs) or Mai's defaults.
 
@@ -102,6 +119,8 @@ def build_params(args):
         default_params.final_seeds = args.seeds
     if args.tune_seed is not None:
         default_params.random_seed = args.tune_seed
+    if args.tie_tolerance is not None:
+        default_params.tie_tolerance = args.tie_tolerance
     if args.tune_root is not None:
         default_params.tune_root = args.tune_root
     if args.pretrained_dir is not None:
@@ -143,6 +162,10 @@ def setup_parser():
     parser.add_argument('--tune_seed', type=int, default=None,
                         help='Seed set before every tuning configuration (recorded as random_seed in '
                              'tune_summary.csv). Default: random_seed in --default (42)')
+    parser.add_argument('--tie_tolerance', type=float, default=None, metavar='PP',
+                        help='Grid points within PP percentage points of the best validation accuracy are '
+                             'tied; the lowest lr, then the lowest wd, wins (experiment/selection.py). '
+                             'Default: tie_tolerance in --default, else 0.5 (one image of val200)')
     parser.add_argument('--tune_root', default=None,
                         help='Root of the tuning outputs. Default: $PETL_TUNE_DIR or ./runs/tune')
     parser.add_argument('--pretrained_dir', default=None,
