@@ -1,6 +1,6 @@
 ## Credit and licence
 
-This repository is a fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Vision), forked at upstream commit `cea7e21` ("Update block.py"). The code is by Zheda Mai, Ping Zhang, Cheng-Hao Tu, Hong-You Chen, Quang-Huy Nguyen, Li Zhang and Wei-Lun Chao, from "Lessons and Insights from a Unifying Study of Parameter-Efficient Fine-Tuning (PEFT) in Visual Recognition", CVPR 2025 ([arXiv:2409.16434](https://arxiv.org/abs/2409.16434)); please cite it with the BibTeX entry in the [Citation](#citation) section at the end of this README. The ViT backbone builds on [timm](https://github.com/huggingface/pytorch-image-models) (pinned to 0.9.12), and the SYS843 data scripts use the processed VTAB-1k that [V-PETL Bench](https://github.com/synbol/Parameter-Efficient-Transfer-Learning-Benchmark) publishes on Hugging Face ([`XiN0919/VTAB-1k`](https://huggingface.co/datasets/XiN0919/VTAB-1k)).
+This repository is a fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Vision), forked at upstream commit `cea7e21` ("Update block.py"). The code is by Zheda Mai, Ping Zhang, Cheng-Hao Tu, Hong-You Chen, Li Zhang and Wei-Lun Chao, from "Lessons and Insights from a Unifying Study of Parameter-Efficient Fine-Tuning (PEFT) in Visual Recognition", CVPR 2025 ([arXiv:2409.16434](https://arxiv.org/abs/2409.16434)); please cite it with the BibTeX entry in the [Citation](#citation) section at the end of this README. The ViT backbone builds on [timm](https://github.com/huggingface/pytorch-image-models) (pinned to 0.9.12), and the SYS843 data scripts use the processed VTAB-1k that [V-PETL Bench](https://github.com/synbol/Parameter-Efficient-Transfer-Learning-Benchmark) publishes on Hugging Face ([`XiN0919/VTAB-1k`](https://huggingface.co/datasets/XiN0919/VTAB-1k)).
 
 The upstream repository has no licence file, so all rights to the original code remain with its authors. This fork is used only for a course project (SYS843, ETS); the changes made for it are listed in [Changes in this fork](#changes-in-this-fork-sys843) below.
 
@@ -402,7 +402,7 @@ If you use this paper/code in your research, please consider citing us:
 ```
 @inproceedings{mai2025lessons,
   title={Lessons and Insights from a Unifying Study of Parameter-Efficient Fine-Tuning (PEFT) in Visual Recognition},
-  author={Mai, Zheda and Zhang, Ping and Tu, Cheng-Hao and Chen, Hong-You and Nguyen, Quang-Huy and Zhang, Li and Chao, Wei-Lun},
+  author={Mai, Zheda and Zhang, Ping and Tu, Cheng-Hao and Chen, Hong-You and Zhang, Li and Chao, Wei-Lun},
   booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   year={2025}
 }
