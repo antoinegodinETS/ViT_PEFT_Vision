@@ -33,6 +33,11 @@ def build(method_args, class_num=10):
     return model, no_head, params
 
 
+def device_of(model):
+    """get_model moves the model to CUDA when one is present; test inputs must follow it."""
+    return next(model.parameters()).device
+
+
 @pytest.mark.parametrize('method', list(METHOD_ARGS))
 def test_trainable_parameter_counts(method):
     model, no_head, _ = build(METHOD_ARGS[method])
@@ -61,7 +66,7 @@ def test_lora_adapts_q_and_v_but_not_k(monkeypatch):
 
     monkeypatch.setattr(F, 'scaled_dot_product_attention', capture_sdpa)
     attn.fused_attn = True
-    x = torch.randn(2, 5, 768)
+    x = torch.randn(2, 5, 768, device=device_of(model))
     with torch.no_grad():
         attn(x, 0)
         q_ref, k_ref, v_ref = attn.qkv(x).reshape(2, 5, 3, 12, 64).permute(2, 0, 3, 1, 4).unbind(0)
@@ -74,7 +79,7 @@ def _last_block_input_len(model):
     seen = {}
     handle = model.blocks[-1].register_forward_pre_hook(lambda mod, args: seen.update(n=args[0].shape[1]))
     with torch.no_grad():
-        out = model.forward_features(torch.randn(1, 3, 224, 224))
+        out = model.forward_features(torch.randn(1, 3, 224, 224, device=device_of(model)))
     handle.remove()
     return seen['n'], out.shape[1]
 
@@ -90,7 +95,7 @@ def test_vpt_shallow_prompts_reach_last_block():
     # The prompt tokens entering the last block depend on the learned prompts.
     seen = {}
     model.blocks[-1].register_forward_pre_hook(lambda mod, args: seen.setdefault('x', []).append(args[0]))
-    img = torch.randn(1, 3, 224, 224)
+    img = torch.randn(1, 3, 224, 224, device=device_of(model))
     with torch.no_grad():
         model.forward_features(img)
         model.vpt.prompt_embeddings.add_(1.0)
