@@ -1,3 +1,9 @@
+## Credit and licence
+
+This repository is a fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Vision), forked at upstream commit `cea7e21` ("Update block.py"). The code is by Zheda Mai, Ping Zhang, Cheng-Hao Tu, Hong-You Chen, Quang-Huy Nguyen, Li Zhang and Wei-Lun Chao, from "Lessons and Insights from a Unifying Study of Parameter-Efficient Fine-Tuning (PEFT) in Visual Recognition", CVPR 2025 ([arXiv:2409.16434](https://arxiv.org/abs/2409.16434)); please cite it with the BibTeX entry in the [Citation](#citation) section at the end of this README. The ViT backbone builds on [timm](https://github.com/huggingface/pytorch-image-models) (pinned to 0.9.12), and the SYS843 data scripts use the processed VTAB-1k that [V-PETL Bench](https://github.com/synbol/Parameter-Efficient-Transfer-Learning-Benchmark) publishes on Hugging Face ([`XiN0919/VTAB-1k`](https://huggingface.co/datasets/XiN0919/VTAB-1k)).
+
+The upstream repository has no licence file, so all rights to the original code remain with its authors. This fork is used only for a course project (SYS843, ETS); the changes made for it are listed in [Changes in this fork](#changes-in-this-fork-sys843) below.
+
 ## Changes in this fork (SYS843)
 
 This fork of [OSU-MLB/ViT_PEFT_Vision](https://github.com/OSU-MLB/ViT_PEFT_Vision) (Mai et al., CVPR 2025) is used to compare LoRA, AdaptFormer, VPT-Shallow, VPT-Deep and full fine-tuning on VTAB-1k (SYS843 course project, ETS). The original README follows below this section. Changes:
@@ -54,7 +60,7 @@ The scripts in `scripts/rorqual/` follow the pattern of the SYS819 project's Ror
 
 **Why 3g.40gb and not 1g.10gb for the search.** The code trains in fp32 at batch 64. The VPT paper (Table 12, A100, batch 64) measures 9.8 to 10.3 GB peak training memory for adapters and VPT with p=1, 11.7 GB for full fine-tuning and 25.8 GB for VPT with p=200. A 1g.10gb slice has 10 GB. After the pilot, `peak_memory_reserved_mib` in `tune_summary.csv` shows which configs fit the small slice; pass `--gpus=nvidia_h100_80gb_hbm3_1g.10gb:1 --cpus-per-task=2` to `sbatch` for those.
 
-Workflow, from a login node in the clone (`~/sys843-vit-peft`):
+Workflow, from a login node in the clone (`~/sys843-vit-peft`). Source `env.sh` again in every new login shell: the variables it sets (`$SYS843_REPO`, `$SYS843_RUNS`, ...) and the account do not persist, and the commands below fail or write to the wrong place when they are empty.
 
 ```bash
 # 1. Environment and data (once)
@@ -88,7 +94,7 @@ done; done
 # then final.sbatch per method with 4-6 tasks per job (jobs should last about 1 h or more)
 ```
 
-Each job writes `<job-name>-<jobid>.out` in the submit directory. A job that reaches its time limit resubmits itself to run after it, up to `SYS843_MAX_CHUNKS` (default 5) jobs. Finished grid points and finished final runs are skipped. Never run two jobs on the same (method, task) at once: both would append to its `tune_summary.csv`. These scripts have only been checked with shellcheck; they have not run on Rorqual yet.
+Each job writes `<job-name>-<jobid>.out` in the submit directory. A job that reaches its time limit resubmits itself to run after it, up to `SYS843_MAX_CHUNKS` (default 5) jobs. Finished grid points and finished final runs are skipped. Never run two jobs on the same (method, task) at once: both would append to its `tune_summary.csv`. The scripts have run on Rorqual: `check_env.sbatch` passed (85 tests on an H100; torch 2.14.1, CUDA 13.2, timm 0.9.12, Python 3.11.5), and `tune.sbatch` completed a full 20-point grid (`lora_r8` on EuroSAT) in 124 min on a 3g.40gb slice, about 6.2 min per grid point, with 8.4 GB peak reserved memory.
 
 ----------------------------------------------------
 
@@ -389,16 +395,16 @@ Upstream stores its tuning results (`tune_summary.csv`) and final run results (`
 ## To collect logits and ground truth for PEFT methods
 Use [main_collect_prediction.py](main_collect_prediction.py). 
 
-## Citation 
+## Citation
 
 If you use this paper/code in your research, please consider citing us:
 
 ```
-@article{mai2024lessons,
-  title={Lessons Learned from a Unifying Empirical Study of Parameter-Efficient Transfer Learning (PETL) in Visual Recognition},
-  author={Mai, Zheda and Zhang, Ping and Tu, Cheng-Hao and Chen, Hong-You and Zhang, Li and Chao, Wei-Lun},
-  journal={arXiv preprint arXiv:2409.16434},
-  year={2024}
+@inproceedings{mai2025lessons,
+  title={Lessons and Insights from a Unifying Study of Parameter-Efficient Fine-Tuning (PEFT) in Visual Recognition},
+  author={Mai, Zheda and Zhang, Ping and Tu, Cheng-Hao and Chen, Hong-You and Nguyen, Quang-Huy and Zhang, Li and Chao, Wei-Lun},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2025}
 }
 ```
 

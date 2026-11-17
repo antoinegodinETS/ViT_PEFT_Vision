@@ -19,10 +19,10 @@
 #     sbatch --gpus=nvidia_h100_80gb_hbm3_1g.10gb:1 --cpus-per-task=2 ... tune.sbatch
 # 6 CPU cores is about 3/7 of an H100's 16 cores per GPU on a Rorqual node (5 loader workers).
 #
-# Time: a grid point is 100 epochs x 768 images plus one val200 pass, about 4 PFLOP for
-# ViT-B/16 at 197 tokens, roughly 5 min on 3/7 of an H100 in fp32; VPT with p=200 doubles the
-# tokens (about 2.2x the time). Estimates: 20 points ~2 h, the p=200 VPT tasks ~4.5 h. The 12 h limit is about 2.5x the slowest estimate; the pilot replaces
-# these guesses (train_time_s in tune_summary.csv).
+# Time, measured: lora_r8 on EuroSAT ran its 20-point grid in 124 min on this 3g.40gb slice
+# (about 6.2 min per point: 100 epochs x 768 images plus one val200 pass), 8.4 GB peak reserved.
+# VPT with p=200 roughly doubles the tokens (estimate, not yet measured: about 2.2x, ~4.5 h).
+# The 12 h limit is about 2.5x that slowest estimate; check train_time_s in tune_summary.csv.
 # Resumable: Slurm sends USR1 5 minutes before the limit; the job stops main_tune.py and
 # resubmits itself to start after this job ends (up to SYS843_MAX_CHUNKS jobs). Finished grid
 # points are skipped; the interrupted one starts over. Resubmitting by hand is also safe, but
