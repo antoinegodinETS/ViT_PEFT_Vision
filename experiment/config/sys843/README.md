@@ -21,17 +21,18 @@ Validation is val200, so one image is 0.5 percentage points and two grid points 
 2. Every grid point within the tie tolerance of the best is tied with it. The tolerance is 0.5 percentage points (one val200 image), `tie_tolerance` in `default_vtab_processed.yml` or `--tie_tolerance` on the command line.
 3. Among the tied points, the lowest lr wins, then the lowest wd: the most conservative setting.
 
-The choice is written to `tune_selection.json` next to `tune_summary.csv` and copied under `selection` in `final_result.json`: the rule, the tolerance, the best validation accuracy, the number of grid points, the number tied (`n_tied`), the tied points with their accuracies, and the selected point (also in `best_tune`).
+The choice is written to `tune_selection.json` next to `tune_summary.csv` and copied under `selection` in `final_result.json`: the rule, the tolerance, the best validation accuracy, the number of grid points, the number tied (`n_tied`), the tied points with their accuracies, and the selected point (also in `best_tune`). Only points of the config's current grid are candidates: rows of `tune_summary.csv` left by an earlier, different grid are ignored and listed under `ignored_off_grid` (count in `n_ignored_off_grid`).
 
 ## Learning-rate x weight-decay grids
 
 | File | lr | wd | Points |
 |---|---|---|---:|
-| `lr_wd_peft.yml` | 1e-4, 3e-4, 1e-3, 3e-3, 1e-2 | 0, 1e-4, 1e-3, 1e-2 | 20 |
+| `lr_wd_peft.yml` (LoRA, AdaptFormer, VPT-Deep) | 1e-4, 3e-4, 1e-3, 3e-3, 1e-2 | 0, 1e-4, 1e-3, 1e-2 | 20 |
+| `lr_wd_vpt_shallow.yml` (`vpt_shallow_paper`) | 3e-4, 1e-3, 3e-3, 1e-2, 3e-2 | 0, 1e-4, 1e-3, 1e-2 | 20 |
 | `lr_wd_full.yml` | 3e-6, 1e-5, 3e-5, 1e-4, 3e-4 | 0, 1e-4, 1e-3, 1e-2 | 20 |
 | `lr_wd_vpt_sgd.yml` (SGD check only) | base lr 25, 5, 1, 0.25, 0.05 | 0.01, 1e-3, 1e-4, 0 | 20 |
 
-Every config therefore has 20 grid points per task, and no method hyperparameter is searched.
+Every config therefore has 20 grid points per task, and no method hyperparameter is searched. VPT-Shallow's grid is the PEFT grid shifted up one lr step: in the 3-task pilot its clevr_count winner sat on the 1e-2 edge (50.0% validation accuracy, other methods 75-86%) and 1e-4 never won.
 
 ## Method configs
 
@@ -67,7 +68,7 @@ It runs on the 3 pilot tasks (oxford_flowers102, eurosat, clevr_count) only: its
 
 ```bash
 for t in $SYS843_PILOT_TASKS; do
-    sbatch --job-name=sys843-tune-vpt_deep_p32_sgd-$t --export=ALL,SYS843_METHOD=vpt_deep_p32_sgd,SYS843_TASK=$t \
+    sbatch --job-name=sys843-tune-vpt_deep_p32_sgd-$t --time="$(sys843_tune_time vpt_deep_p32_sgd)" --export=ALL,SYS843_METHOD=vpt_deep_p32_sgd,SYS843_TASK=$t \
         "$SYS843_REPO/scripts/rorqual/tune.sbatch"
 done
 # when they are done:

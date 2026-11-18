@@ -1,0 +1,6 @@
+# Learning-rate x weight-decay grid for VPT-Shallow (vpt_shallow_paper): the PEFT grid
+# (lr_wd_peft.yml) shifted up one lr step, 5 x 4 = 20 grid points like every other config.
+# Reason: in the 3-task pilot, clevr_count's winner sat on the 1e-2 edge of the PEFT grid
+# (50.0% val, other methods 75-86%) and 1e-4 never won, so 1e-4 is dropped for 3e-2.
+lr: [0.0003, 0.001, 0.003, 0.01, 0.03]
+wd: [0.0, 0.0001, 0.001, 0.01]

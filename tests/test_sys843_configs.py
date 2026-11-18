@@ -55,7 +55,7 @@ SWEEP_METHODS = ['lora_r8', 'adaptformer_d16', 'adaptformer_paper', 'vpt_deep_p3
 CHECK_METHODS = ['vpt_deep_p32_sgd']
 PILOT_TASKS = ['oxford_flowers102', 'eurosat', 'clevr_count']
 PEFT_LRS = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
-GRID_LRS = {'full': [3e-6, 1e-5, 3e-5, 1e-4, 3e-4], 'vpt_deep_p32_sgd': [25.0, 5.0, 1.0, 0.25, 0.05]}
+GRID_LRS = {'full': [3e-6, 1e-5, 3e-5, 1e-4, 3e-4], 'vpt_shallow_paper': [3e-4, 1e-3, 3e-3, 1e-2, 3e-2], 'vpt_deep_p32_sgd': [25.0, 5.0, 1.0, 0.25, 0.05]}
 GRID_WDS = {'vpt_deep_p32_sgd': [0.01, 0.001, 0.0001, 0.0]}
 
 
@@ -189,3 +189,19 @@ def test_run_tasks_skips_check_config_outside_the_pilot(tmp_path):
                 env={'SYS843_RUNS': str(tmp_path)})
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert proc.stdout.count('not a pilot task') == 2
+
+
+def test_tune_time_per_config_from_methods_yml():
+    """sys843_tune_time (scripts/rorqual/env.sh) reads every config's tune_time in methods.yml."""
+    expected = {'lora_r8': '03:30:00', 'adaptformer_d16': '03:30:00', 'adaptformer_paper': '03:30:00',
+                'vpt_deep_p32': '03:30:00', 'vpt_deep_p32_sgd': '03:30:00', 'full': '04:30:00',
+                'vpt_deep_paper': '06:00:00', 'vpt_shallow_paper': '06:00:00'}
+    assert set(expected) == set(main_tune.sys843_methods())
+    for name, limit in expected.items():
+        assert main_tune.sys843_methods()[name]['tune_time'] == limit
+        out = subprocess.run(['bash', '-c', f'source scripts/rorqual/env.sh && sys843_tune_time {name}'],
+                             cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
+        assert out == limit
+    bad = subprocess.run(['bash', '-c', 'source scripts/rorqual/env.sh && sys843_tune_time nope'],
+                         cwd=REPO, capture_output=True, text=True)
+    assert bad.returncode != 0

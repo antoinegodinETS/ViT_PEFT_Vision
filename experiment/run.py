@@ -156,13 +156,14 @@ SEED_STAT_KEYS = ['test_top1', 'test_top5', 'test_loss', 'train_top1', 'train_to
                   'epoch_time_mean_s', 'test_eval_time_s', 'peak_memory_allocated_mib', 'peak_memory_reserved_mib']
 
 
-def final_run(default_params, sum_name=None, result_name='final_result.json'):
+def final_run(default_params, sum_name=None, result_name='final_result.json', grid=None):
     """Retrain the best tuned config on train800val200 for each seed and test once at the end.
 
     The test set is evaluated a single time per seed, after the last epoch; that
     last-epoch accuracy is the reported metric (no per-epoch test evaluation and
     no best-over-epochs number). Per-seed results plus mean and sample std go to
-    the summary CSV and the result JSON.
+    the summary CSV and the result JSON. grid: the current grid points; tuned rows of other
+    points are ignored by the selection (see experiment.selection.select_best_tune).
     """
     if sum_name is None:
         sum_name = summary_name_for(result_name)
@@ -174,7 +175,7 @@ def final_run(default_params, sum_name=None, result_name='final_result.json'):
     # final_acc_hp: select on the final-epoch val accuracy, else on the best one along training;
     # near-ties are broken by the rule in experiment/selection.py.
     best_tune, selection = select_best_tune(tune_summary, bool(default_params.final_acc_hp),
-                                            tie_tolerance(default_params))
+                                            tie_tolerance(default_params), grid=grid)
     with open(os.path.join(default_params.output_dir, 'tune_selection.json'), 'w') as f:
         json.dump(selection, f, indent=2)
     logger.info(f'selected {best_tune}: {selection["n_tied"]} grid point(s) within '

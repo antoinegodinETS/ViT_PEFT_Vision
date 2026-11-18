@@ -49,7 +49,7 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False, stage='a
         logger.info('all tuning is done')
         if stage != 'tune':
             logger.info('start final run')
-            final_run(default_params, result_name=default_params.final_output_name)
+            final_run(default_params, result_name=default_params.final_output_name, grid=param_grid)
         return
     if stage == 'final':
         raise SystemExit(f'--stage final: {len(missing)} of {len(param_grid)} grid points are not tuned yet '
@@ -117,6 +117,6 @@ def hyper_tune_final_run(default_params, hyper_tune_params, test=False, stage='a
     if stage == 'tune':
         logger.info('--stage tune: tuning done, no final run')
         return
-    final_run(default_params, result_name=default_params.final_output_name)
+    final_run(default_params, result_name=default_params.final_output_name, grid=param_grid)
 
 

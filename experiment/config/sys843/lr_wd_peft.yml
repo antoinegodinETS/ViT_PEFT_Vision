@@ -1,5 +1,5 @@
-# Learning-rate x weight-decay grid for the PEFT methods (LoRA, AdaptFormer, VPT-Shallow,
-# VPT-Deep): 5 x 4 = 20 grid points per (method config, task), times any list in the
+# Learning-rate x weight-decay grid for the PEFT methods (LoRA, AdaptFormer, VPT-Deep;
+# VPT-Shallow uses lr_wd_vpt_shallow.yml): 5 x 4 = 20 grid points per (method config, task), times any list in the
 # method config. AdamW with the cosine schedule of default_vtab_processed.yml.
 lr: [0.0001, 0.0003, 0.001, 0.003, 0.01]
 wd: [0.0, 0.0001, 0.001, 0.01]

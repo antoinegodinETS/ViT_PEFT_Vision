@@ -4,11 +4,14 @@
 # paper's setting), or check: a sanity check run on the 3 pilot tasks only (oxford_flowers102,
 # eurosat, clevr_count), never part of the 19-task sweep (main_tune.sys843_sweep_methods,
 # sys843_sweep_methods in scripts/rorqual/env.sh).
-lora_r8:           {tune: method/lora_r8.yml,           lrwd: lr_wd_peft.yml, setting: [budget, paper]}
-adaptformer_d16:   {tune: method/adaptformer_d16.yml,   lrwd: lr_wd_peft.yml, setting: [budget]}
-adaptformer_paper: {tune: method/adaptformer_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper]}
-vpt_deep_p32:      {tune: method/vpt_deep_p32.yml,      lrwd: lr_wd_peft.yml, setting: [budget]}
-vpt_deep_paper:    {tune: method/vpt_deep_paper.yml,    lrwd: lr_wd_peft.yml, setting: [paper]}
-vpt_shallow_paper: {tune: method/vpt_shallow_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper]}
-full:              {tune: method/full.yml,              lrwd: lr_wd_full.yml, setting: [paper]}
-vpt_deep_p32_sgd:  {tune: method/vpt_deep_p32_sgd.yml,  lrwd: lr_wd_vpt_sgd.yml, setting: [check]}
+# tune_time: Slurm time limit of the config's tune.sbatch job (sys843_tune_time in env.sh), from
+# the 3-task pilot on a 3g.40gb slice, FP32: slowest 20-point job about 2.4 h for the adapter,
+# LoRA and VPT-Deep p=32 configs, 2.9 h for full, 4.03 h for VPT-Shallow p=200.
+lora_r8:           {tune: method/lora_r8.yml,           lrwd: lr_wd_peft.yml, setting: [budget, paper], tune_time: '03:30:00'}
+adaptformer_d16:   {tune: method/adaptformer_d16.yml,   lrwd: lr_wd_peft.yml, setting: [budget], tune_time: '03:30:00'}
+adaptformer_paper: {tune: method/adaptformer_paper.yml, lrwd: lr_wd_peft.yml, setting: [paper], tune_time: '03:30:00'}
+vpt_deep_p32:      {tune: method/vpt_deep_p32.yml,      lrwd: lr_wd_peft.yml, setting: [budget], tune_time: '03:30:00'}
+vpt_deep_paper:    {tune: method/vpt_deep_paper.yml,    lrwd: lr_wd_peft.yml, setting: [paper], tune_time: '06:00:00'}
+vpt_shallow_paper: {tune: method/vpt_shallow_paper.yml, lrwd: lr_wd_vpt_shallow.yml, setting: [paper], tune_time: '06:00:00'}
+full:              {tune: method/full.yml,              lrwd: lr_wd_full.yml, setting: [paper], tune_time: '04:30:00'}
+vpt_deep_p32_sgd:  {tune: method/vpt_deep_p32_sgd.yml,  lrwd: lr_wd_vpt_sgd.yml, setting: [check], tune_time: '03:30:00'}

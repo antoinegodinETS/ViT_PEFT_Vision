@@ -17,11 +17,11 @@
 # runs are the only source of timing numbers for the report. 16 CPU cores is an H100's share of
 # a Rorqual node (15 loader workers, enough to decode the largest test sets quickly).
 #
-# Time: per seed, 100 epochs x 960 images (about 5 PFLOP, roughly 2.5-3 min in fp32 on an H100)
-# plus one test pass (up to 73,728 images for dSprites, under a minute); with staging, about
-# 10-12 min per (method, task) for 3 seeds, about 25 min for VPT with p=200. The Alliance asks
-# for jobs of about 1 h or more, so give each job 4-6 tasks. The 4 h limit covers 6 tasks of
-# the slowest config (2.5 h) with 1.6x margin.
+# Time: per seed, 100 epochs x 960 images plus one test pass (up to 73,728 images for dSprites).
+# The per-seed time on a full H100 is not measured yet (pilot final timings pending); the tuning
+# pilot measured VPT-Shallow p=200 at 1.82x LoRA per epoch on a 3g.40gb slice. The Alliance asks
+# for jobs of about 1 h or more, so give each job 4-6 tasks; the 4 h limit and the tasks per job
+# are to be revisited with the pilot final timings.
 # Resumable: on Slurm's USR1 warning the job resubmits itself (same tasks); tasks with a
 # final_result.json are skipped, and an interrupted task reruns its 3 seeds.
 #SBATCH --job-name=sys843-final

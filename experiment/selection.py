@@ -38,14 +38,22 @@ def select_grid_point(scored, tolerance=DEFAULT_TIE_TOLERANCE):
     return tied[0][0], tied
 
 
-def select_best_tune(tune_rows, final_acc_hp=True, tolerance=DEFAULT_TIE_TOLERANCE):
+def select_best_tune(tune_rows, final_acc_hp=True, tolerance=DEFAULT_TIE_TOLERANCE, grid=None):
     """tune_rows: tune_summary.csv rows without the header (lists of strings).
+
+    grid: the config's current grid points (list of param_set dicts). When given, only rows
+    of these points are candidates; rows of points no longer in the grid (left in
+    tune_summary.csv by an earlier, different grid) are ignored and listed in the selection.
 
     Returns (best_tune, selection), where selection records the rule, the tolerance and
     every tied grid point, for tune_selection.json and final_result.json.
     """
     col = VAL_TOP1_COL if final_acc_hp else VAL_BEST_TOP1_COL
     scored = [(eval(row[0]), float(row[col])) for row in tune_rows]
+    ignored = []
+    if grid is not None:
+        ignored = [(p, acc) for p, acc in scored if p not in grid]
+        scored = [(p, acc) for p, acc in scored if p in grid]
     best_tune, tied = select_grid_point(scored, tolerance)
     best_acc = max(acc for _, acc in scored)
     selection = OrderedDict([
@@ -59,4 +67,8 @@ def select_best_tune(tune_rows, final_acc_hp=True, tolerance=DEFAULT_TIE_TOLERAN
         ('selected_val_acc', tied[0][1]),
         ('tied', [OrderedDict([('param_set', p), ('val_acc', acc)]) for p, acc in tied]),
     ])
+    if grid is not None:
+        selection['n_ignored_off_grid'] = len(ignored)
+        selection['ignored_off_grid'] = [OrderedDict([('param_set', p), ('val_acc', acc)])
+                                         for p, acc in ignored]
     return best_tune, selection

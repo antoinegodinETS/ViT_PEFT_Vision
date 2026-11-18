@@ -107,3 +107,16 @@ def test_make_optimizer_sgd_with_scaled_lr():
     assert isinstance(adamw, torch.optim.AdamW) and adamw.param_groups[0]['lr'] == 0.001
     with pytest.raises(ValueError):
         make_optimizer([w], opt_params(optimizer='rmsprop'))
+
+
+def test_off_grid_rows_are_ignored_and_recorded():
+    # tune_summary.csv of a grid that changed: lr 1e-4 left the grid, 3e-2 joined it.
+    grid = [{'lr': lr, 'wd': 0.0} for lr in (0.001, 0.03)]
+    tune_rows = rows([({'lr': 0.0001, 'wd': 0.0}, 90.0),  # stale, best overall: must not win
+                      ({'lr': 0.001, 'wd': 0.0}, 70.0), ({'lr': 0.03, 'wd': 0.0}, 80.0)])
+    best, selection = select_best_tune(tune_rows, True, 0.5, grid=grid)
+    assert best == {'lr': 0.03, 'wd': 0.0}
+    assert selection['n_grid_points'] == 2 and selection['best_val_acc'] == 80.0
+    assert selection['n_ignored_off_grid'] == 1
+    assert selection['ignored_off_grid'][0]['param_set'] == {'lr': 0.0001, 'wd': 0.0}
+    assert 'ignored_off_grid' not in select_best_tune(tune_rows)[1]  # no grid given: all rows

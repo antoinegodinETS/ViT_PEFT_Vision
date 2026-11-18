@@ -6,8 +6,9 @@
 #
 # Submit from a login node (the account comes from env.sh), one job per (method, task):
 #     source ~/sys843-vit-peft/scripts/rorqual/env.sh
-#     sbatch --job-name=sys843-tune-lora_r8-eurosat --export=ALL,SYS843_METHOD=lora_r8,SYS843_TASK=eurosat \
-#         "$SYS843_REPO/scripts/rorqual/tune.sbatch"
+#     sbatch --job-name=sys843-tune-lora_r8-eurosat --time="$(sys843_tune_time lora_r8)" \
+#         --export=ALL,SYS843_METHOD=lora_r8,SYS843_TASK=eurosat "$SYS843_REPO/scripts/rorqual/tune.sbatch"
+# --time comes from the config's tune_time in methods.yml; the 6 h #SBATCH limit is only the fallback.
 #
 # GPU size: a 3g.40gb MIG slice by default, NOT the 1g.10gb slice. The code trains in fp32 at
 # batch 64; the VPT paper (arXiv 2203.12119, Table 12, A100, batch 64) measures 9.8-10.3 GB
@@ -19,10 +20,11 @@
 #     sbatch --gpus=nvidia_h100_80gb_hbm3_1g.10gb:1 --cpus-per-task=2 ... tune.sbatch
 # 6 CPU cores is about 3/7 of an H100's 16 cores per GPU on a Rorqual node (5 loader workers).
 #
-# Time, measured: lora_r8 on EuroSAT ran its 20-point grid in 124 min on this 3g.40gb slice
-# (about 6.2 min per point: 100 epochs x 768 images plus one val200 pass), 8.4 GB peak reserved.
-# VPT with p=200 roughly doubles the tokens (estimate, not yet measured: about 2.2x, ~4.5 h).
-# The 12 h limit is about 2.5x that slowest estimate; check train_time_s in tune_summary.csv.
+# Time, measured in the 3-task pilot (3g.40gb, FP32): a 20-point job takes 2.0-2.4 h for LoRA,
+# AdaptFormer and VPT-Deep p=32, 2.1-2.9 h for VPT-Deep paper, 2.8-2.9 h for full, and up to
+# 4.03 h for VPT-Shallow p=200 (1.82x LoRA per epoch). Per-config limits (tune_time in
+# methods.yml): 3:30 for LoRA, AdaptFormer and VPT-Deep p=32, 4:30 for full, 6:00 for the VPT
+# paper configs.
 # Resumable: Slurm sends USR1 5 minutes before the limit; the job stops main_tune.py and
 # resubmits itself to start after this job ends (up to SYS843_MAX_CHUNKS jobs). Finished grid
 # points are skipped; the interrupted one starts over. Resubmitting by hand is also safe, but
@@ -31,7 +33,7 @@
 #SBATCH --gpus=nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=32G
-#SBATCH --time=12:00:00
+#SBATCH --time=06:00:00
 #SBATCH --signal=B:USR1@300
 #SBATCH --output=%x-%j.out
 set -euo pipefail

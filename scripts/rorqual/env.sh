@@ -70,8 +70,11 @@ sys843_run_resumable() {
     if [ "$interrupted" = 1 ]; then
         if [ "$chunk" -lt "${SYS843_MAX_CHUNKS:-5}" ]; then
             echo "time limit near: resubmitting $script as chunk $((chunk + 1)), after job $SLURM_JOB_ID"
+            # Same time limit as this job (e.g. the per-config tune_time), not the script's default.
+            local limit
+            limit="$(squeue -h -j "$SLURM_JOB_ID" -o %l 2>/dev/null || true)"
             sbatch --dependency="afterany:$SLURM_JOB_ID" --job-name="$SLURM_JOB_NAME" \
-                --export="ALL,SYS843_CHUNK=$((chunk + 1))" "$script"
+                ${limit:+--time="$limit"} --export="ALL,SYS843_CHUNK=$((chunk + 1))" "$script"
         else
             echo "time limit near and SYS843_MAX_CHUNKS reached: resubmit $script by hand"
         fi
@@ -87,6 +90,19 @@ sys843_check_method() {
             "$(grep -oE '^[a-z0-9_]+:' "$SYS843_REPO/experiment/config/sys843/methods.yml" | tr -d : | tr '\n' ' ')" >&2
         return 2
     fi
+}
+
+# Time limit of config $1's tune.sbatch job: its tune_time in methods.yml (the one source).
+#     sbatch --time="$(sys843_tune_time lora_r8)" ... tune.sbatch
+sys843_tune_time() {
+    local t
+    t="$(grep -E "^$1:" "$SYS843_REPO/experiment/config/sys843/methods.yml" \
+        | grep -oE "tune_time: *'[0-9:-]+'" | grep -oE "[0-9][0-9:-]*" || true)"
+    if [ -z "$t" ]; then
+        echo "error: no tune_time for config '$1' in methods.yml" >&2
+        return 2
+    fi
+    echo "$t"
 }
 
 # The 3 pilot tasks: the only tasks a sanity-check config (setting `check` in methods.yml,
