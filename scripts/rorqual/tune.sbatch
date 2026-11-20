@@ -1,7 +1,8 @@
 #!/bin/bash
 # Hyperparameter search for ONE (SYS843 method config, task): every grid point of the config's
 # lr x wd grid (20 points for every config) on train800, selected on the final-epoch val200
-# accuracy (near-ties broken by the rule in experiment/selection.py). No final run here: that is final.sbatch, on a full H100.
+# accuracy (near-ties broken by the rule in experiment/selection.py). No final run here: that is final.sbatch, on the same
+# 3g.40gb slice type.
 # Output: $SYS843_RUNS/sys843_vtab/processed_vtab/<task>/<method>/tune_summary.csv.
 #
 # Submit from a login node (the account comes from env.sh), one job per (method, task):
@@ -14,7 +15,7 @@
 # batch 64; the VPT paper (arXiv 2203.12119, Table 12, A100, batch 64) measures 9.8-10.3 GB
 # peak training memory for adapters and VPT with p=1, 11.7 GB for full fine-tuning and 25.8 GB
 # for VPT with p=200, and a 1g.10gb slice has 10 GB. 3g.40gb fits every config. Search timings
-# are not reported (all time and memory numbers in the report come from full-H100 final runs),
+# are not reported (all time and memory numbers in the report come from the final runs),
 # so the slice size only has to keep the job within its limit. After the pilot, a config whose
 # tune_summary.csv shows peak_memory_reserved_mib well under 9,000 can go on the small slice:
 #     sbatch --gpus=nvidia_h100_80gb_hbm3_1g.10gb:1 --cpus-per-task=2 ... tune.sbatch

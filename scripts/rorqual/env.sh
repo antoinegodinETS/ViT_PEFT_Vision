@@ -28,12 +28,16 @@ export PETL_PRETRAINED_DIR="$SYS843_WEIGHTS"
 export PETL_TUNE_DIR="$SYS843_RUNS"
 
 # Load the Python module and activate the project virtualenv.
+# Restores the caller's nounset state: jobs (set -euo pipefail) keep it on, and an interactive
+# login shell keeps it off (Rorqual's command-not-found handler fails under set -u).
 sys843_activate() {
+    local nounset_was_on=0
+    case $- in *u*) nounset_was_on=1 ;; esac
     set +u  # Lmod reads unset variables
     module load StdEnv/2023 "$PYTHON_MODULE"
     # shellcheck disable=SC1091
     source "$VENV_DIR/bin/activate"
-    set -u
+    if [ "$nounset_was_on" = 1 ]; then set -u; fi
 }
 
 # Extract one task's tarball to the node-local disk and set SYS843_DATA_PATH (the --data_path).

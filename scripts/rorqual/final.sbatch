@@ -12,23 +12,28 @@
 #         --export=ALL,SYS843_METHOD=lora_r8,SYS843_TASKS="eurosat dtd kitti caltech101" \
 #         "$SYS843_REPO/scripts/rorqual/final.sbatch"
 #
-# GPU size: a full H100 for every final job, so the reported training time, per-epoch time and
-# peak memory (recorded per seed in final_result.json) are comparable across methods. These
-# runs are the only source of timing numbers for the report. 16 CPU cores is an H100's share of
-# a Rorqual node (15 loader workers, enough to decode the largest test sets quickly).
+# GPU size: a 3g.40gb MIG slice, the same slice type as tuning, for every final job, so the
+# reported training time, per-epoch time and peak memory (recorded per seed in final_result.json)
+# are comparable across methods: every method runs on identical hardware, and the report gives
+# slice times. These runs are the only source of timing numbers for the report. Full-H100 jobs
+# waited days on Rorqual (ReqNodeNotAvail) while 3g.40gb slices start within minutes. The
+# resources are #SBATCH lines, not sbatch flags, so a self-resubmitted chunk stays on the slice.
+# 6 CPU cores is about 3/7 of an H100's 16 cores per GPU on a Rorqual node (5 loader workers).
+# Do not override the GPU for some methods only (e.g. --gpus=h100:1 --cpus-per-task=16
+# --mem=64G for a full H100): the timings would no longer be comparable.
 #
-# Time: per seed, 100 epochs x 960 images plus one test pass (up to 73,728 images for dSprites).
-# The per-seed time on a full H100 is not measured yet (pilot final timings pending); the tuning
-# pilot measured VPT-Shallow p=200 at 1.82x LoRA per epoch on a 3g.40gb slice. The Alliance asks
-# for jobs of about 1 h or more, so give each job 4-6 tasks; the 4 h limit and the tasks per job
-# are to be revisited with the pilot final timings.
+# Time: per seed, 100 epochs x 15 steps (train800val200, drop_last), about 1.25x a tuning
+# epoch on the same slice, i.e. roughly 7.5-15 min per seed, plus one test pass (up to 73,728
+# images for dSprites). The per-seed time is not measured yet. The 3 h limit covers the 3 pilot
+# tasks of the slowest config (VPT p=200, up to about 44 min per task for 3 seeds) with margin.
+# Tasks per job and --time for the sweep are set once the pilot final timings are in.
 # Resumable: on Slurm's USR1 warning the job resubmits itself (same tasks); tasks with a
 # final_result.json are skipped, and an interrupted task reruns its 3 seeds.
 #SBATCH --job-name=sys843-final
-#SBATCH --gpus=h100:1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --gpus=nvidia_h100_80gb_hbm3_3g.40gb:1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=32G
+#SBATCH --time=03:00:00
 #SBATCH --signal=B:USR1@300
 #SBATCH --output=%x-%j.out
 set -euo pipefail
